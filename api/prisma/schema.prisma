@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String
+  password  String? // null for Google-only accounts
+  googleId  String?  @unique
+  avatarUrl String?
+  roleId    Int
+  role      Role     @relation(fields: [roleId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+// Permission-based RBAC: a role is a named list of permissions. "*" means every permission.
+model Role {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  permissions String[]
+  users       User[]
+}
+
+// Email sign-ups wait here until their OTP is verified, then become a User.
+model PendingSignup {
+  email     String   @id
+  name      String
+  password  String
+  codeHash  String
+  attempts  Int      @default(0)
+  sentAt    DateTime
+  expiresAt DateTime
+}
+
+// RAG: an uploaded file, split into chunks that each carry an embedding (pgvector).
+// Chunks are written and searched with raw SQL in api/src/rag/rag.service.ts.
+model Document {
+  id        Int             @id @default(autoincrement())
+  title     String
+  source    String          @unique // file name; uploading the same name replaces the document
+  createdAt DateTime        @default(now())
+  chunks    DocumentChunk[]
+}
+
+model DocumentChunk {
+  id         Int                         @id @default(autoincrement())
+  documentId Int
+  document   Document                    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  index      Int
+  page       Int?
+  content    String
+  embedding  Unsupported("vector(768)") // keep in sync with EMBEDDING_DIMENSIONS in ai.service.ts
+}
+
+model Item {
+  id        Int      @id @default(autoincrement())
+  name      String
+  done      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}

@@ -1,0 +1,19 @@
+{
+  "name": "hackathon-boilerplate",
+  "private": true,
+  "scripts": {
+    "setup": "node -e \"const f=require('fs');for(const d of ['api','web','mobile'])f.existsSync(d+'/.env')||!f.existsSync(d)||f.copyFileSync(d+'/.env.example',d+'/.env')\" && npm install && npm install --prefix api && npm install --prefix web && npm install --prefix mobile",
+    "dev": "concurrently -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm run dev --prefix api",
+    "dev:web": "npm run dev --prefix web",
+    "dev:mobile": "npm run dev --prefix mobile",
+    "typecheck": "npm run typecheck --prefix api && npm run typecheck --prefix web && npm run typecheck --prefix mobile",
+    "db:up": "docker compose up -d",
+    "db:push": "npm run db:push --prefix api",
+    "db:seed": "npm run db:seed --prefix api",
+    "db:studio": "npm run db:studio --prefix api"
+  },
+  "devDependencies": {
+    "concurrently": "10.0.5"
+  }
+}

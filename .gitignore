@@ -1,0 +1,5 @@
+node_modules
+dist
+.env
+web/src/routeTree.gen.ts
+*.log
