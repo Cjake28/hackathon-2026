@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { AuthUser } from '../auth/auth.guard';
 import { hasPermission, type Permission } from '../auth/permissions';
 import { briefingFacts, say, sayTime } from '../briefing/briefing-facts';
+import { pointsFor } from '../chores/points';
 import { assertCanActFor, findPerson, nextAt, notify, speak } from '../family';
 import { distanceM, sayDistance } from '../location/geo';
 import { driveMinutes, placeName } from '../location/google';
@@ -281,6 +282,31 @@ export const TOOLS = [
       const where = near ? `near ${near}` : nearest ? `about ${sayDistance(nearest.d)} from ${nearest.pl.name}` : 'away';
       const eta = minutes ? `, about ${minutes} minutes from Home by car` : '';
       return `${p.name} is ${where}${eta} (updated ${updated}).`;
+    },
+  }),
+  tool({
+    name: 'announce',
+    description: "Announce a message to everyone in the house: every phone shows it and the hub says it out loud.",
+    params: z.object({ message: z.string().describe('e.g. "Dinner is ready"') }),
+    permission: 'intercom.send',
+    confirm: true,
+    describe: ({ message }) => `Announce to everyone: ${message}`,
+    run: async ({ message }, { prisma, user }) => {
+      await notify(prisma, null, 'intercom', `${user.name}: ${message}`, { fromUserId: user.id });
+      speak(`Announcement from ${user.name}: ${message}`);
+      return 'Announced.';
+    },
+  }),
+  tool({
+    name: 'my_points',
+    description: 'Reward points someone earned for chores (10 points per approved chore).',
+    params: z.object({ person: z.string().optional().describe('Leave empty for the speaker') }),
+    permission: 'tasks.own',
+    confirm: false,
+    run: async ({ person: name }, { prisma, user }) => {
+      const p = await person(prisma, name, user);
+      const { points, choresDone } = await pointsFor(prisma, p.id);
+      return `${p.name} has ${points} points (${choresDone} chores approved).`;
     },
   }),
   tool({

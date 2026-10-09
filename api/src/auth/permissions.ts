@@ -20,6 +20,7 @@ export const PERMISSIONS = [
   'memory.own', // Jarvis remembers things about you
   'location.share', // the phone sends its GPS (#51)
   'location.read', // see where everyone is, manage places (parents)
+  'intercom.send', // "tell everyone dinner's ready" (#18): family, not guests
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

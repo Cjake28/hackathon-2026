@@ -36,7 +36,7 @@ const CONFIRM_SECONDS = 60; // a proposed action waits this long for "yes"
 // pre-recorded clip (voice/clips/phrases.txt), so it plays instantly. General questions still go to the AI.
 const GUEST_REFUSAL = "I don't recognize your voice, so I can't share family info.";
 const FAMILY_TOPIC =
-  /\bhome\b|bahay|alarm|task|chore|grocer|calendar|schedule|budget|spend|money|family|pamilya|\bmom\b|\bdad\b|nanay|tatay|\bkids?\b|anak/i;
+  /\bhome\b|bahay|alarm|task|chore|grocer|calendar|schedule|budget|spend|money|family|pamilya|\bmom\b|\bdad\b|nanay|tatay|\bkids?\b|anak|everyone|announce|lahat|points/i;
 const LOCALHOST = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
 const RECENT_MINUTES = 5; // earlier voice messages the AI sees, for follow-ups
 // "Good morning, Jarvis" always gives the briefing (#30): too important for the demo to leave to the model.
@@ -201,7 +201,11 @@ export class VoiceController {
           }
           if (tool.confirm) {
             await checkTool(tool, args.data, deps);
-            const description = (tool.describe as ((a: unknown) => string) | undefined)?.(args.data) ?? tool.name;
+            // Trailing punctuation off ("Aalis na ako." would become "Aalis na ako.? Say yes").
+            const description = ((tool.describe as ((a: unknown) => string) | undefined)?.(args.data) ?? tool.name).replace(
+              /[.!?\s]+$/,
+              '',
+            );
             return {
               text: `${description}? Say yes to confirm.`,
               action: { tool: tool.name, args: args.data, description, status: 'pending' },

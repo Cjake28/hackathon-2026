@@ -1,5 +1,6 @@
 import type { AuthUser } from '../auth/auth.guard';
 import { hasPermission } from '../auth/permissions';
+import { pointsFor } from '../chores/points';
 import type { PrismaService } from '../prisma.service';
 
 // Hub local time, the way Jarvis says it: "Saturday, October 10, 4:00 PM".
@@ -22,7 +23,7 @@ export async function briefingFacts(prisma: PrismaService, user: AuthUser) {
   startOfDay.setHours(0, 0, 0, 0);
   const in24h = new Date(now.getTime() + 24 * 3600_000);
 
-  const [alarms, events, tasks, grocery, memory] = await Promise.all([
+  const [alarms, events, tasks, grocery, memory, score] = await Promise.all([
     prisma.alarm.findMany({
       where: { userId: user.id, enabled: true, nextAt: { lte: in24h } },
       orderBy: { nextAt: 'asc' },
@@ -34,6 +35,7 @@ export async function briefingFacts(prisma: PrismaService, user: AuthUser) {
     prisma.task.findMany({ where: { assigneeId: user.id, status: { not: 'done' } }, orderBy: { createdAt: 'asc' } }),
     hasPermission(user.permissions, 'items.read') ? prisma.item.findMany({ where: { done: false }, take: 10 }) : [],
     prisma.memoryNote.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 10 }),
+    pointsFor(prisma, user.id),
   ]);
 
   const list = (items: string[], empty: string) => (items.length ? items.join('; ') : empty);
@@ -46,5 +48,6 @@ export async function briefingFacts(prisma: PrismaService, user: AuthUser) {
       ? [`Grocery list: ${list(grocery.map((i) => i.name), 'empty')}.`]
       : []),
     `What ${user.name} likes or does: ${list(memory.map((m) => m.text), 'nothing saved')}.`,
+    `Reward points: ${score.points} (${score.choresDone} chores approved).`,
   ].join('\n');
 }

@@ -516,7 +516,7 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
    The briefing and the chore feedback are written fresh by the AI each time, so they can't be pre-recorded.
 2. **Then: help the team.** The demo can't run without alarms ringing (Hub), Ana's phone screen (UI) and the mic (Voice).
    Brain owns the hub laptop and runs the 2:30 merge.
-3. **Now (decided): the three extras**, all in Brain files:
+3. **Done: the three extras** (tested live; the demo test is still 110/110), all in Brain files:
    - **Intercom (#18):** "Tell everyone dinner's ready" / "Sabihin mo sa lahat…" → `announce` tool (confirm) →
      `intercom` notice to every device + the hub says "Announcement from Mom: dinner's ready". New permission
      `intercom.send` (parents and kids, not guests).
@@ -528,6 +528,14 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
      left: wash the dishes and finish math homework." In `welcomeHome()` (`api/src/location/welcome.ts`): the
      location page uses it; Hub dev, call it from the device poll's arrival too (replaces your `speak("Welcome home…")`).
    - Prompt caching (about 1 s per turn) stays for the very end, only if there's time.
+   - Heard on the hub (a fake speaker on port 4103 logged it): "Announcement from Mom: Dinner is ready" ·
+     "Great job, Ana! The sink is empty and dry… That's 10 points, you have 10 now." · "Welcome home, Ana", then
+     "You have 2 tasks left: finish math homework and wash the dishes." Guests asking to announce get the fixed refusal.
+   - **Hub dev:** in `device.controller.ts`, replace your welcome-home `speak(...)` with `welcomeHome(this.prisma, user)`
+     from `api/src/location/welcome.ts` (same first line, plus the tasks left).
+   - **UI dev:** show `intercom` notices on every device (a big banner), and the `GET /api/points` leaderboard on the
+     dashboard (`Points` type in `web/src/types.ts`). The chore photo response has `points` for a "+10" toast.
+   - **Everyone:** `npm run db:seed` after pulling (new `intercom.send` permission).
 4. **Not doing:** a smaller model or a lower quantization. `qwen3.5:4b` is already Q4_K_M, fits 100% on the GPU and
    answers in 1–3 s; going smaller makes it dumber for a speed problem we no longer have.
 

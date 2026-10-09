@@ -21,6 +21,7 @@ export const PERMISSIONS = [
   'memory.own',
   'location.share',
   'location.read',
+  'intercom.send',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -178,3 +179,6 @@ export type FamilyLocation = {
   since: string;
   updatedAt: string;
 };
+
+// #15 reward points (Brain dev): GET /api/points, most points first. POST /chores/:id/photo also returns `points`.
+export type Points = { userId: number; name: string; points: number; choresDone: number };

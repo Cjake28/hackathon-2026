@@ -4,6 +4,7 @@ import type { AuthUser } from '../auth/auth.guard';
 import { notify, speak } from '../family';
 import { PrismaService } from '../prisma.service';
 import { placeAt } from './geo';
+import { welcomeHome } from './welcome';
 
 type Fix = { lat: number; lng: number; accuracy?: number };
 type PlaceInput = { name: string; lat: number; lng: number; radiusM?: number };
@@ -45,7 +46,8 @@ export class LocationController {
         for (const p of parents) {
           if (p.id !== user.id) await notify(this.prisma, p.id, here ? 'presence:arrived' : 'presence:left', text, { userId: user.id, placeId: here?.id ?? left?.id });
         }
-        if (here) speak(/^home$/i.test(here.name) ? `Welcome home, ${user.name}` : text); // same text as Hub + the voice clip
+        if (here && /^home$/i.test(here.name)) welcomeHome(this.prisma, user); // + what's left to do (#54)
+        else if (here) speak(text);
       }
     }
     return { place: here?.name ?? null };

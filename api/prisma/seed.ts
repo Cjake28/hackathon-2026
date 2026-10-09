@@ -19,13 +19,14 @@ async function main() {
       permissions: [
         ...ITEMS, 'ai.use', 'alarms.own', 'alarms.family', 'tasks.own', 'tasks.assign',
         'calendar.use', 'budget.use', 'presence.read', 'memory.own', 'location.share', 'location.read',
+        'intercom.send',
       ],
     },
     {
       name: 'child',
       permissions: [
         'items.read', 'items.create', 'ai.use', 'alarms.own', 'tasks.own', 'calendar.use', 'presence.read', 'memory.own',
-        'location.share',
+        'location.share', 'intercom.send',
       ],
     },
     { name: 'guest', permissions: ['ai.use'] }, // every unknown voice speaks as the Guest user

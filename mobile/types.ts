@@ -21,6 +21,7 @@ export const PERMISSIONS = [
   'memory.own',
   'location.share',
   'location.read',
+  'intercom.send',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

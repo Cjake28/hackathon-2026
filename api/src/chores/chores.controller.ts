@@ -17,6 +17,7 @@ import { hasPermission } from '../auth/permissions';
 import { AiService } from '../ai/ai.service';
 import { notify, speak } from '../family';
 import { PrismaService } from '../prisma.service';
+import { POINTS_PER_CHORE, pointsFor } from './points';
 
 type ChorePhoto = { stage: 'before' | 'after'; image: string }; // image: base64 JPEG
 const MAX_IMAGE_MB = 4;
@@ -83,7 +84,12 @@ export class ChoresController {
       `${name}: ${task.title}: ${verdict.done ? 'done' : 'needs a redo'}. ${verdict.feedback}`,
       { taskId, done: verdict.done },
     );
-    speak(verdict.done ? `Great job, ${name}! ${verdict.feedback}` : `Almost, ${name}. ${verdict.feedback}`);
-    return { ...saved, assigneeName: name };
+    // #15: an approved chore is worth POINTS_PER_CHORE; `points` = the new total (for the UI's "+10"). A chore that was
+    // already done earns nothing new, so don't announce points again.
+    const { points } = await pointsFor(this.prisma, task.assigneeId);
+    const earned = verdict.done && task.status !== 'done' ? ` That's ${POINTS_PER_CHORE} points, you have ${points} now.` : '';
+    const feedback = verdict.feedback.replace(/^(great job|good job|well done|awesome|yes)[!.,]*\s*/i, ''); // the hub adds the praise
+    speak(verdict.done ? `Great job, ${name}! ${feedback}${earned}` : `Almost, ${name}. ${feedback}`);
+    return { ...saved, assigneeName: name, points };
   }
 }

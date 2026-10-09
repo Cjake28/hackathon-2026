@@ -17,6 +17,7 @@ import { HubController } from './hub.controller';
 import { ItemsController } from './items/items.controller';
 import { LocationController } from './location/location.controller';
 import { MemoryController } from './memory/memory.controller';
+import { PointsController } from './chores/points.controller';
 import { PrismaService } from './prisma.service';
 import { RagController } from './rag/rag.controller';
 import { RagService } from './rag/rag.service';
@@ -56,6 +57,7 @@ import { VoiceController } from './voice/voice.controller';
     ChoresController,
     LocationController,
     MemoryController,
+    PointsController,
     VoiceController,
   ],
   // and every new service here
