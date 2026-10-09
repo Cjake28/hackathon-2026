@@ -1,5 +1,6 @@
 # OWNER: voice-ears. Speech-to-text: local faster-whisper (multilingual small); ElevenLabs Scribe first only if ELEVENLABS_STT=true.
 import io
+import threading
 
 import numpy as np
 import requests
@@ -8,6 +9,7 @@ import soundfile as sf
 import config
 
 _whisper = None
+_lock = threading.Lock()
 
 
 def _scribe(audio: np.ndarray) -> str:
@@ -25,12 +27,17 @@ def _scribe(audio: np.ndarray) -> str:
     return r.json().get('text', '').strip()
 
 
-def _local(audio: np.ndarray) -> str:
+def _load():
     global _whisper
-    if _whisper is None:
-        from faster_whisper import WhisperModel
-        _whisper = WhisperModel('small', device='cpu', compute_type='int8')
-    segments, _ = _whisper.transcribe(audio, language=None, beam_size=1, vad_filter=True)
+    with _lock:
+        if _whisper is None:
+            from faster_whisper import WhisperModel
+            _whisper = WhisperModel('small', device='cpu', compute_type='int8')
+    return _whisper
+
+
+def _local(audio: np.ndarray) -> str:
+    segments, _ = _load().transcribe(audio, language=None, beam_size=1, vad_filter=True)
     return ' '.join(s.text.strip() for s in segments).strip()
 
 
@@ -48,3 +55,6 @@ def transcribe(audio: np.ndarray) -> str:
     text = _local(audio)
     print('  [stt: whisper]')
     return text
+
+
+threading.Thread(target=_load, daemon=True).start()  # load whisper now, not on the first command
