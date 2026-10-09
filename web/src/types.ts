@@ -38,10 +38,16 @@ export type Item = {
   createdAt: string;
 };
 
-export type ChatMessage = { role: 'user' | 'assistant'; content: string };
-
 // Local AI (Ollama on the hub). `missing` lists models that still need `ollama pull`.
-export type AiStatus = { online: boolean; model: string; embeddingModel: string; missing: string[] };
+// `vision`: the chat model can read pictures. `tools`: it can use app tools.
+export type AiStatus = {
+  online: boolean;
+  model: string;
+  embeddingModel: string;
+  missing: string[];
+  vision: boolean;
+  tools: boolean;
+};
 
 // RAG
 export type RagDocument = {
@@ -52,7 +58,29 @@ export type RagDocument = {
   _count: { chunks: number };
 };
 
-export type AskResult = {
-  answer: string;
-  sources: { n: number; documentId: number; title: string; page: number | null; snippet: string; score: number }[];
+export type Source = { n: number; documentId: number; title: string; page: number | null; snippet: string; score: number };
+
+export type AskResult = { answer: string; sources: Source[] };
+
+// Saved AI chats
+export type Conversation = { id: number; title: string; useDocs: boolean; useTools: boolean; updatedAt: string };
+
+// A tool action the AI wants to do, waiting for the user's OK.
+export type PendingAction = {
+  tool: string;
+  args: Record<string, unknown>;
+  description: string;
+  status: 'pending' | 'done' | 'cancelled';
 };
+
+export type ConversationMessage = {
+  id: number;
+  role: 'user' | 'assistant';
+  content: string;
+  image: string | null; // base64 JPEG
+  sources: Source[] | null;
+  action: PendingAction | null;
+  createdAt: string;
+};
+
+export type ConversationWithMessages = Conversation & { messages: ConversationMessage[] };

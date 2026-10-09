@@ -5,10 +5,12 @@ import {
   OnApplicationBootstrap,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { Ollama, type Message } from 'ollama';
+import { Ollama, type Message, type Tool } from 'ollama';
 import { z } from 'zod';
 
-export type ChatMessage = { role: 'user' | 'assistant'; content: string };
+// `images`: base64 pictures for vision models (see status().vision).
+export type ChatMessage = { role: 'user' | 'assistant'; content: string; images?: string[] };
+export type { Message as AiMessage, Tool as AiTool };
 
 // Local AI (Ollama on the hub). Settings in api/.env.
 const HOST = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
@@ -93,14 +95,30 @@ export class AiService implements OnApplicationBootstrap {
     return vectors;
   }
 
-  // For the UI: is Ollama running, and are both models downloaded?
+  // One step of a tool-using AI: returns the model's message, which may contain `tool_calls`.
+  async toolStep(messages: Message[], tools: Tool[]) {
+    const res = await this.call(() =>
+      this.ollama.chat({ ...this.base(FACTUAL), messages, tools, stream: false }),
+    );
+    return res.message;
+  }
+
+  // For the UI: is Ollama running, are both models downloaded, and can the chat model see images / use tools?
   async status() {
-    const base = { model: MODEL, embeddingModel: EMBEDDING_MODEL };
+    const base = { model: MODEL, embeddingModel: EMBEDDING_MODEL, vision: false, tools: false };
     try {
       const { models } = await this.ollama.list();
       const names = models.map((m) => m.name);
       const has = (model: string) => names.includes(model) || names.includes(`${model}:latest`);
-      return { ...base, online: true, missing: [MODEL, EMBEDDING_MODEL].filter((m) => !has(m)) };
+      const missing = [MODEL, EMBEDDING_MODEL].filter((m) => !has(m));
+      const capabilities = has(MODEL) ? (await this.ollama.show({ model: MODEL })).capabilities ?? [] : [];
+      return {
+        ...base,
+        online: true,
+        missing,
+        vision: capabilities.includes('vision'),
+        tools: capabilities.includes('tools'),
+      };
     } catch {
       return { ...base, online: false, missing: [] as string[] };
     }

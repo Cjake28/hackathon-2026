@@ -47,6 +47,37 @@ export async function streamText(path: string, body: unknown, onText: (text: str
   }
 }
 
+// Streams whose first line is JSON (e.g. { sources }) and the rest is text (the AI's answer).
+export async function streamWithHeader<T>(
+  path: string,
+  body: unknown,
+  onHeader: (header: T) => void,
+  onText: (text: string) => void,
+) {
+  let buffer = '';
+  let headerDone = false;
+  await streamText(path, body, (text) => {
+    if (headerDone) return onText(text);
+    buffer += text;
+    const newline = buffer.indexOf('\n');
+    if (newline === -1) return;
+    headerDone = true;
+    onHeader(JSON.parse(buffer.slice(0, newline)));
+    if (buffer.length > newline + 1) onText(buffer.slice(newline + 1));
+  });
+}
+
+// Shrinks a photo to fit maxSize × maxSize and returns base64 JPEG (no "data:" prefix). Smaller = faster AI.
+export async function imageToBase64(file: File, maxSize = 1024) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+}
+
 // File → base64 string (for JSON uploads).
 export const fileToBase64 = (file: File) =>
   new Promise<string>((resolve, reject) => {

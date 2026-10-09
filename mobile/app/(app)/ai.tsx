@@ -1,22 +1,55 @@
 import { useRef, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { CameraIcon, ImageIcon, PlusIcon, SquareIcon, Volume2Icon, XIcon } from 'lucide-react-native';
+import { FlatList, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { AiStatus } from '@/components/AiStatus';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
-import { useChat } from '@/hooks/useAi';
+import { useAiStatus, useSpeech } from '@/hooks/useAi';
+import {
+  useConversation,
+  useConversations,
+  useCreateConversation,
+  useSendMessage,
+  useUpdateConversation,
+} from '@/hooks/useConversations';
+import { pickImage } from '@/lib/image';
 import { cn } from '@/lib/utils';
-import type { ChatMessage } from '@/types';
+import type { ConversationMessage } from '@/types';
 
+// Saved AI chats: pick one from the row at the top (the latest opens first), or start a new one.
 export default function AiChatScreen() {
-  const { messages, send, pending, reset } = useChat();
+  const { data: list } = useConversations();
+  const [picked, setPicked] = useState<number | 'new' | null>(null);
+  const activeId = picked === 'new' ? undefined : (picked ?? list?.[0]?.id);
+  const { data: conversation } = useConversation(activeId);
+  const { data: status } = useAiStatus();
+  const create = useCreateConversation();
+  const update = useUpdateConversation();
+  const send = useSendMessage();
+  const speech = useSpeech();
   const [input, setInput] = useState('');
-  const list = useRef<FlatList<ChatMessage>>(null);
+  const [image, setImage] = useState<string | null>(null);
+  const [newChatDocs, setNewChatDocs] = useState(false);
+  const messages = useRef<FlatList<ConversationMessage>>(null);
 
-  const submit = () => {
-    if (!input.trim() || pending) return;
-    send(input.trim());
+  const useDocs = conversation ? conversation.useDocs : newChatDocs;
+  const setUseDocs = (on: boolean) =>
+    conversation ? update.mutate({ id: conversation.id, useDocs: on }) : setNewChatDocs(on);
+
+  const submit = async () => {
+    const content = input.trim();
+    if (!content || send.isPending) return;
+    let id = conversation?.id;
+    if (!id) {
+      id = (await create.mutateAsync({ useDocs: newChatDocs })).id;
+      setPicked(id);
+    }
+    send.mutate({ id, content, image: image ?? undefined });
     setInput('');
+    setImage(null);
   };
 
   return (
@@ -25,49 +58,102 @@ export default function AiChatScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       className="flex-1 bg-background"
     >
+      <View className="gap-2 border-b border-border p-3">
+        <AiStatus />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
+          <Button size="sm" variant={activeId ? 'outline' : 'default'} onPress={() => setPicked('new')}>
+            <Icon as={PlusIcon} />
+            <Text>New</Text>
+          </Button>
+          {list?.map((c) => (
+            <Button key={c.id} size="sm" variant={c.id === activeId ? 'default' : 'outline'} onPress={() => setPicked(c.id)}>
+              <Text numberOfLines={1} className="max-w-36">
+                {c.title}
+              </Text>
+            </Button>
+          ))}
+        </ScrollView>
+        <Pressable className="flex-row items-center gap-2" onPress={() => setUseDocs(!useDocs)}>
+          <Checkbox checked={useDocs} onCheckedChange={setUseDocs} />
+          <Text className="text-sm">Use my documents</Text>
+        </Pressable>
+      </View>
+
       <FlatList
-        ref={list}
-        data={messages}
-        keyExtractor={(_, i) => String(i)}
-        contentContainerClassName="gap-2 p-4"
-        onContentSizeChange={() => list.current?.scrollToEnd({ animated: true })}
-        ListHeaderComponent={
-          <View className="flex-row items-center justify-between">
-            <AiStatus />
-            {messages.length ? (
-              <Button variant="ghost" size="sm" onPress={reset} disabled={pending}>
-                <Text>New chat</Text>
-              </Button>
-            ) : null}
-          </View>
-        }
+        ref={messages}
+        data={conversation?.messages ?? []}
+        keyExtractor={(m) => String(m.id)}
+        contentContainerClassName="gap-3 p-4"
+        onContentSizeChange={() => messages.current?.scrollToEnd({ animated: true })}
         ListEmptyComponent={<Text className="text-center text-muted-foreground">Ask anything to start.</Text>}
         renderItem={({ item }) => (
-          <View
-            className={cn(
-              'max-w-[85%] rounded-lg px-3 py-2',
-              item.role === 'user' ? 'self-end bg-primary' : 'self-start bg-muted',
-            )}
-          >
-            <Text className={item.role === 'user' ? 'text-primary-foreground' : undefined}>
-              {item.content || '…'}
-            </Text>
-          </View>
+          <MessageBubble
+            message={item}
+            speaking={speech.speakingId === item.id}
+            onSpeak={() => speech.toggle(item.id, item.content)}
+          />
         )}
       />
-      <View className="flex-row gap-2 border-t border-border p-3">
+
+      {image && (
+        <View className="flex-row items-center gap-2 px-3">
+          <Image source={{ uri: `data:image/jpeg;base64,${image}` }} className="h-16 w-16 rounded-md" />
+          <Button variant="ghost" size="icon" onPress={() => setImage(null)}>
+            <Icon as={XIcon} />
+          </Button>
+        </View>
+      )}
+
+      <View className="flex-row items-center gap-2 border-t border-border p-3">
+        {status?.vision && (
+          <>
+            <Button testID="chat-camera" variant="outline" size="icon" onPress={async () => setImage((await pickImage('camera')) ?? image)}>
+              <Icon as={CameraIcon} />
+            </Button>
+            <Button testID="chat-photo" variant="outline" size="icon" onPress={async () => setImage((await pickImage('library')) ?? image)}>
+              <Icon as={ImageIcon} />
+            </Button>
+          </>
+        )}
         <Input
           testID="chat-input"
           className="flex-1"
-          placeholder="Type a message…"
+          placeholder={image ? 'Ask about the picture…' : 'Type a message…'}
           value={input}
           onChangeText={setInput}
           onSubmitEditing={submit}
         />
-        <Button testID="chat-send" onPress={submit} disabled={pending || !input.trim()}>
+        <Button testID="chat-send" onPress={submit} disabled={send.isPending || !input.trim()}>
           <Text>Send</Text>
         </Button>
       </View>
     </KeyboardAvoidingView>
+  );
+}
+
+function MessageBubble(props: { message: ConversationMessage; speaking: boolean; onSpeak: () => void }) {
+  const { message: m } = props;
+  const mine = m.role === 'user';
+
+  return (
+    <View className={cn('max-w-[85%] gap-1', mine ? 'self-end items-end' : 'self-start')}>
+      {m.image && (
+        <Image source={{ uri: `data:image/jpeg;base64,${m.image}` }} className="h-40 w-40 rounded-md" resizeMode="cover" />
+      )}
+      <View className={cn('rounded-lg px-3 py-2', mine ? 'bg-primary' : 'bg-muted')}>
+        <Text className={mine ? 'text-primary-foreground' : undefined}>{m.content || '…'}</Text>
+      </View>
+      {!mine && !!m.sources?.length && (
+        <Text className="text-xs text-muted-foreground">
+          {m.sources.map((s) => `[${s.n}] ${s.title}${s.page ? ` p.${s.page}` : ''}`).join('  ')}
+        </Text>
+      )}
+      {!mine && !!m.content && (
+        <Button variant="ghost" size="sm" className="self-start" onPress={props.onSpeak}>
+          <Icon as={props.speaking ? SquareIcon : Volume2Icon} />
+          <Text>{props.speaking ? 'Stop' : 'Read aloud'}</Text>
+        </Button>
+      )}
+    </View>
   );
 }

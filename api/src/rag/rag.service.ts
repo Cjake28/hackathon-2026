@@ -63,8 +63,15 @@ export class RagService {
     return { sources, answer: prompt ? this.ai.textStream(prompt, RAG.system) : once(NOT_FOUND) };
   }
 
-  // Finds the chunks closest in meaning to the question and builds the prompt with numbered sources.
   private async retrieve(question: string) {
+    const { sources, context } = await this.search(question);
+    const prompt = sources.length ? `Sources:\n\n${context}\n\nQuestion: ${question}` : null;
+    return { sources, prompt };
+  }
+
+  // Finds the chunks closest in meaning to the question.
+  // `sources` is for the UI, `context` is the numbered source text to give the AI ("" when nothing matched).
+  async search(question: string) {
     if (!question?.trim()) throw new BadRequestException('Ask a question first');
     const [query] = await this.ai.embed([question], 'query');
     const vector = toVector(query);
@@ -87,10 +94,11 @@ export class RagService {
     const context = found
       .map((s, i) => `[${i + 1}] ${s.title}${s.page ? ` (page ${s.page})` : ''}\n${s.content}`)
       .join('\n\n');
-    const prompt = found.length ? `Sources:\n\n${context}\n\nQuestion: ${question}` : null;
-    return { sources, prompt };
+    return { sources, context };
   }
 }
+
+export type Source = Awaited<ReturnType<RagService['search']>>['sources'][number];
 
 const NOT_FOUND = "I couldn't find anything about that in the documents.";
 

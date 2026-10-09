@@ -6,6 +6,7 @@ import { AiController } from './ai/ai.controller';
 import { AiService } from './ai/ai.service';
 import { AuthController } from './auth/auth.controller';
 import { AuthGuard } from './auth/auth.guard';
+import { ConversationsController } from './conversations/conversations.controller';
 import { HubController } from './hub.controller';
 import { ItemsController } from './items/items.controller';
 import { PrismaService } from './prisma.service';
@@ -26,6 +27,7 @@ import { UsersController } from './users/users.controller';
   // register every new controller here
   controllers: [
     AuthController,
+    ConversationsController,
     AiController,
     HubController,
     ItemsController,

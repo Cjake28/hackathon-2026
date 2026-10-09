@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { api, streamText } from '@/lib/api';
-import type { AiStatus, ChatMessage } from '@/types';
+import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import type { AiStatus } from '@/types';
 
-// Is the hub's local AI running, and are its models downloaded? Rechecked every 15 seconds.
+// Is the hub's local AI running, are its models downloaded, can it see pictures? Rechecked every 15 seconds.
 export const useAiStatus = () =>
   useQuery({
     queryKey: ['ai-status'],
@@ -11,26 +11,25 @@ export const useAiStatus = () =>
     refetchInterval: 15_000,
   });
 
-// AI chat with a streamed reply. The conversation lives in component state (not saved).
-export function useChat() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+// Reads text aloud with the device's own voices (they work offline). One message at a time.
+export function useSpeech() {
+  const supported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+  const [speakingId, setSpeakingId] = useState<number | null>(null);
 
-  const appendToReply = (text: string) =>
-    setMessages((prev) => {
-      const last = prev[prev.length - 1];
-      return [...prev.slice(0, -1), { ...last, content: last.content + text }];
-    });
+  useEffect(() => () => void (supported && speechSynthesis.cancel()), [supported]);
 
-  const chat = useMutation({
-    mutationFn: (history: ChatMessage[]) => streamText('/ai/chat', { messages: history }, appendToReply),
-    onMutate: (history) => setMessages([...history, { role: 'assistant', content: '' }]),
-    onError: (_error, history) => setMessages(history), // drop the unfinished reply; the toast shows why
-  });
-
-  return {
-    messages,
-    pending: chat.isPending,
-    send: (content: string) => chat.mutate([...messages, { role: 'user', content }]),
-    reset: () => setMessages([]),
+  const toggle = (id: number, text: string) => {
+    if (!supported) return;
+    speechSynthesis.cancel();
+    if (speakingId === id) return setSpeakingId(null);
+    const utterance = new SpeechSynthesisUtterance(text.replace(/\[\d+\]/g, '').replace(/[*#_`>]/g, ''));
+    const local = speechSynthesis.getVoices().filter((v) => v.localService);
+    utterance.voice = local.find((v) => v.lang.startsWith(navigator.language.slice(0, 2))) ?? local[0] ?? null;
+    utterance.onend = () => setSpeakingId(null);
+    utterance.onerror = () => setSpeakingId(null);
+    setSpeakingId(id);
+    speechSynthesis.speak(utterance);
   };
+
+  return { supported, speakingId, toggle };
 }

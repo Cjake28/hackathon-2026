@@ -1,56 +1,181 @@
 import { useEffect, useRef, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
-import { RotateCcw, Send } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { ImagePlus, List, Plus, Send, Square, Trash2, Volume2, X } from 'lucide-react';
 import { AiStatus } from '@/components/AiStatus';
-import { useChat } from '@/hooks/useAi';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { useAiStatus, useSpeech } from '@/hooks/useAi';
+import {
+  useConversation,
+  useConversations,
+  useCreateConversation,
+  useDeleteConversation,
+  useSendMessage,
+  useUpdateConversation,
+} from '@/hooks/useConversations';
+import { imageToBase64 } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import type { ConversationMessage } from '@/types';
 
-export const Route = createFileRoute('/_app/ai')({ component: AiChatPage });
+// Saved AI chats. ?c=<id> picks the conversation; without it the latest one opens.
+export const Route = createFileRoute('/_app/ai')({
+  validateSearch: (search: Record<string, unknown>): { c?: number } =>
+    search.c ? { c: Number(search.c) } : {},
+  component: AiChatPage,
+});
 
 function AiChatPage() {
-  const { messages, send, pending, reset } = useChat();
+  const { c } = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const { data: list } = useConversations();
+  const activeId = c ?? list?.[0]?.id;
+  const select = (id?: number) => navigate({ search: id ? { c: id } : {} });
+
+  return (
+    <div className="grid h-[calc(100vh-10rem)] gap-4 md:grid-cols-[15rem_1fr]">
+      <aside className="hidden min-h-0 flex-col gap-2 md:flex">
+        <ConversationList activeId={activeId} onSelect={select} />
+      </aside>
+      <ChatPanel conversationId={activeId} onSelect={select} />
+    </div>
+  );
+}
+
+function ConversationList({ activeId, onSelect }: { activeId?: number; onSelect: (id?: number) => void }) {
+  const { data: list } = useConversations();
+  const create = useCreateConversation();
+  const remove = useDeleteConversation();
+
+  return (
+    <>
+      <Button onClick={() => create.mutate({}, { onSuccess: (c) => onSelect(c.id) })}>
+        <Plus /> New chat
+      </Button>
+      <div className="flex-1 space-y-1 overflow-y-auto">
+        {list?.map((c) => (
+          <div
+            key={c.id}
+            className={cn(
+              'group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm hover:bg-muted',
+              c.id === activeId && 'bg-muted font-medium',
+            )}
+          >
+            <button className="flex-1 truncate text-left" onClick={() => onSelect(c.id)}>
+              {c.title}
+            </button>
+            <button
+              aria-label="Delete chat"
+              className="text-muted-foreground opacity-0 group-hover:opacity-100"
+              onClick={() => remove.mutate(c.id, { onSuccess: () => c.id === activeId && onSelect() })}
+            >
+              <Trash2 className="size-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function ChatPanel({ conversationId, onSelect }: { conversationId?: number; onSelect: (id?: number) => void }) {
+  const { data: conversation } = useConversation(conversationId);
+  const { data: list } = useConversations();
+  const { data: status } = useAiStatus();
+  const create = useCreateConversation();
+  const update = useUpdateConversation();
+  const send = useSendMessage();
+  const speech = useSpeech();
   const [input, setInput] = useState('');
+  const [image, setImage] = useState<string | null>(null);
+  const [newChatDocs, setNewChatDocs] = useState(false); // settings for a chat that doesn't exist yet
+  const fileInput = useRef<HTMLInputElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
-  useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [messages]);
+  useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [conversation?.messages]);
 
-  const submit = () => {
-    if (!input.trim() || pending) return;
-    send(input.trim());
+  const useDocs = conversation ? conversation.useDocs : newChatDocs;
+  const setUseDocs = (on: boolean) =>
+    conversation ? update.mutate({ id: conversation.id, useDocs: on }) : setNewChatDocs(on);
+
+  const submit = async () => {
+    const content = input.trim();
+    if (!content || send.isPending) return;
+    let id = conversation?.id;
+    if (!id) {
+      id = (await create.mutateAsync({ useDocs: newChatDocs })).id;
+      onSelect(id);
+    }
+    send.mutate({ id, content, image: image ?? undefined });
     setInput('');
+    setImage(null);
   };
 
   return (
-    <div className="flex h-[calc(100vh-10rem)] flex-col gap-4">
-      <div className="flex items-center justify-between">
+    <div className="flex min-h-0 flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold">AI Chat</h1>
+          <h1 className="truncate text-2xl font-bold">{conversation?.title ?? 'AI Chat'}</h1>
           <AiStatus />
         </div>
-        <Button variant="ghost" size="sm" onClick={reset} disabled={pending || !messages.length}>
-          <RotateCcw /> New chat
-        </Button>
+        <div className="flex items-center gap-3">
+          <Label className="font-normal">
+            <Checkbox checked={useDocs} onCheckedChange={(on) => setUseDocs(on === true)} />
+            Use my documents
+          </Label>
+          {/* Small screens: the chat list lives in a menu. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="md:hidden" aria-label="Chats">
+                <List />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onSelect()}>
+                <Plus /> New chat
+              </DropdownMenuItem>
+              {list?.map((c) => (
+                <DropdownMenuItem key={c.id} onClick={() => onSelect(c.id)}>
+                  {c.title}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto rounded-lg border p-4">
-        {!messages.length && (
-          <p className="text-center text-sm text-muted-foreground">Ask anything to start.</p>
+        {!conversation?.messages.length && (
+          <p className="text-center text-sm text-muted-foreground">
+            Ask anything to start.{useDocs ? ' Answers will use your documents.' : ''}
+          </p>
         )}
-        {messages.map((m, i) => (
-          <div
-            key={i}
-            className={cn(
-              'w-fit max-w-[80%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm',
-              m.role === 'user' ? 'ml-auto bg-primary text-primary-foreground' : 'bg-muted',
-            )}
-          >
-            {m.content || '…'}
-          </div>
+        {conversation?.messages.map((m) => (
+          <MessageBubble
+            key={m.id}
+            message={m}
+            speaking={speech.speakingId === m.id}
+            onSpeak={speech.supported ? () => speech.toggle(m.id, m.content) : undefined}
+          />
         ))}
         <div ref={bottom} />
       </div>
+
+      {image && (
+        <div className="flex items-center gap-2">
+          <img src={`data:image/jpeg;base64,${image}`} alt="" className="h-16 rounded-md border" />
+          <Button variant="ghost" size="icon" aria-label="Remove picture" onClick={() => setImage(null)}>
+            <X />
+          </Button>
+        </div>
+      )}
 
       <form
         className="flex gap-2"
@@ -59,10 +184,34 @@ function AiChatPage() {
           submit();
         }}
       >
+        {status?.vision && (
+          <>
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (file) setImage(await imageToBase64(file));
+                e.target.value = '';
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label="Add a picture"
+              onClick={() => fileInput.current?.click()}
+            >
+              <ImagePlus />
+            </Button>
+          </>
+        )}
         <Textarea
           className="min-h-10 flex-1 resize-none"
           rows={1}
-          placeholder="Type a message… (Enter to send, Shift+Enter for a new line)"
+          placeholder={image ? 'Ask about the picture…' : 'Type a message… (Enter to send, Shift+Enter for a new line)'}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
@@ -72,10 +221,44 @@ function AiChatPage() {
             }
           }}
         />
-        <Button type="submit" disabled={pending || !input.trim()}>
+        <Button type="submit" disabled={send.isPending || !input.trim()}>
           <Send /> Send
         </Button>
       </form>
+    </div>
+  );
+}
+
+function MessageBubble(props: { message: ConversationMessage; speaking: boolean; onSpeak?: () => void }) {
+  const { message: m } = props;
+  const mine = m.role === 'user';
+
+  return (
+    <div className={cn('flex w-fit max-w-[85%] flex-col gap-2', mine && 'ml-auto items-end')}>
+      {m.image && <img src={`data:image/jpeg;base64,${m.image}`} alt="" className="max-h-48 rounded-md border" />}
+      <div
+        className={cn(
+          'whitespace-pre-wrap rounded-lg px-3 py-2 text-sm',
+          mine ? 'bg-primary text-primary-foreground' : 'bg-muted',
+        )}
+      >
+        {m.content || '…'}
+      </div>
+      {!mine && !!m.sources?.length && (
+        <div className="space-y-0.5 text-xs text-muted-foreground">
+          {m.sources.map((s) => (
+            <p key={s.n}>
+              [{s.n}] {s.title}
+              {s.page ? ` · page ${s.page}` : ''}
+            </p>
+          ))}
+        </div>
+      )}
+      {!mine && m.content && props.onSpeak && (
+        <Button variant="ghost" size="sm" className="h-7 px-2" onClick={props.onSpeak}>
+          {props.speaking ? <Square /> : <Volume2 />} {props.speaking ? 'Stop' : 'Read aloud'}
+        </Button>
+      )}
     </div>
   );
 }

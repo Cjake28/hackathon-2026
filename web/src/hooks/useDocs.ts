@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, fileToBase64, streamText } from '@/lib/api';
-import type { AskResult, RagDocument } from '@/types';
+import { api, fileToBase64, streamWithHeader } from '@/lib/api';
+import type { AskResult, RagDocument, Source } from '@/types';
 
 // RAG: the documents the AI answers from.
 export const useDocuments = () =>
@@ -35,19 +35,12 @@ export function useAsk() {
   const ask = useMutation({
     mutationFn: async (question: string) => {
       setData(null);
-      let header = '';
-      let gotSources = false;
-      await streamText('/rag/ask', { question }, (text) => {
-        if (gotSources) {
-          setData((d) => d && { ...d, answer: d.answer + text });
-          return;
-        }
-        header += text;
-        const newline = header.indexOf('\n');
-        if (newline === -1) return;
-        gotSources = true;
-        setData({ sources: JSON.parse(header.slice(0, newline)).sources, answer: header.slice(newline + 1) });
-      });
+      await streamWithHeader<{ sources: Source[] }>(
+        '/rag/ask',
+        { question },
+        ({ sources }) => setData({ sources, answer: '' }),
+        (text) => setData((d) => d && { ...d, answer: d.answer + text }),
+      );
     },
   });
 

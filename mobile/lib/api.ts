@@ -64,6 +64,26 @@ export const api = {
   delete: <T>(path: string) => request<T>('DELETE', path),
 };
 
+// Streams whose first line is JSON (e.g. { sources }) and the rest is text (the AI's answer).
+export async function streamWithHeader<T>(
+  path: string,
+  body: unknown,
+  onHeader: (header: T) => void,
+  onText: (text: string) => void,
+) {
+  let buffer = '';
+  let headerDone = false;
+  await streamText(path, body, (text) => {
+    if (headerDone) return onText(text);
+    buffer += text;
+    const newline = buffer.indexOf('\n');
+    if (newline === -1) return;
+    headerDone = true;
+    onHeader(JSON.parse(buffer.slice(0, newline)));
+    if (buffer.length > newline + 1) onText(buffer.slice(newline + 1));
+  });
+}
+
 // POSTs and reads a streamed text reply (AI chat). React Native's fetch can't stream; expo/fetch can.
 export async function streamText(path: string, body: unknown, onText: (text: string) => void) {
   const res = await streamingFetch(`${API_URL}${path}`, {
