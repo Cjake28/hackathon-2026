@@ -33,8 +33,12 @@ while True:
 
         clip = audio.record()
         text = stt.transcribe(clip)
+        secs = len(clip) / config.SAMPLE_RATE
         if not text.strip():
+            print(f'  (heard nothing in {secs:.1f} s: speak right after "listening...")')
             continue
+        if secs < 2:
+            print(f'  (short clip {secs:.1f} s: voice ID is unreliable, say a full sentence)')
         if state.forced_speaker:
             uid, name, score = state.forced_speaker, names.get(state.forced_speaker), 1.0
             state.forced_speaker = None
