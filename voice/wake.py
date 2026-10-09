@@ -1,13 +1,8 @@
 # OWNER: voice-ears. Wake word: openwakeword "hey_jarvis" (inference_framework="onnx").
-import time
-
 import numpy as np
-import sounddevice as sd
 
-import config
-import state
+import audio
 
-FRAME = 1280  # 80 ms at 16 kHz, what openwakeword expects
 THRESHOLD = 0.5
 _model = None
 
@@ -26,18 +21,17 @@ def _load():
 
 
 def wait_for_wake() -> None:
-    """Blocks until "hey jarvis" is heard."""
+    """Blocks until "hey jarvis" is heard. The following audio.record() continues from the next frame."""
     model = _load()
     model.reset()
+    audio.frame()
+    audio.flush()  # ignore anything said before we started listening
     print('  say "hey jarvis"...')
-    with sd.InputStream(samplerate=config.SAMPLE_RATE, channels=1, dtype='int16', blocksize=FRAME) as stream:
-        while True:
-            frame, _ = stream.read(FRAME)
-            if state.speaking.is_set():  # don't wake on our own voice
-                time.sleep(0.01)
-                continue
-            scores = model.predict(frame[:, 0].astype(np.int16))
-            if max(scores.values()) >= THRESHOLD:
-                print('  [wake]')
-                model.reset()
-                return
+    while True:
+        frame = audio.frame()  # frames are dropped while Jarvis speaks (audio._on_audio)
+        scores = model.predict((frame * 32767).astype(np.int16))
+        if max(scores.values()) >= THRESHOLD:
+            print('  [wake]')
+            model.reset()
+            audio.keep_next = True
+            return
