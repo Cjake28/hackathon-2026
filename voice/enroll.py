@@ -1,4 +1,4 @@
-# OWNER: voice-id. python enroll.py --user-id 4 -> records 4 sentences -> profiles/4.npy (averaged embedding).
+# OWNER: voice-id. python enroll.py --user-id 4 -> records 6 sentences -> profiles/4.npy (averaged embedding).
 # Names/ids come from hub.get_people(). Audio is never saved, only the embedding.
 import argparse
 
@@ -14,14 +14,23 @@ SENTENCES = [
     'Pakigising mo ako ng alas sais bukas ng umaga.',
     'Add milk, eggs and bread to the grocery list.',
     'Sino ang nasa bahay ngayon? I just got home.',
+    'Hey Jarvis, set an alarm for six thirty.',  # short commands: real clips are short
+    'Ano ang gagawin ko today? Remind me to call Lola after dinner.',
 ]
-SECONDS = 5
+SECONDS = 7
 
 
 def record() -> np.ndarray:
     a = sd.rec(int(SECONDS * config.SAMPLE_RATE), samplerate=config.SAMPLE_RATE, channels=1, dtype='float32')
     sd.wait()
-    return a[:, 0]
+    a = a[:, 0]
+    # trim leading/trailing silence (30 ms frames) so short sentences aren't mostly silence
+    f = int(0.03 * config.SAMPLE_RATE)
+    rms = np.sqrt(np.mean(a[: len(a) // f * f].reshape(-1, f) ** 2, axis=1))
+    loud = np.where(rms > max(0.01, rms.max() * 0.1))[0]
+    if len(loud):
+        a = a[max(0, loud[0] - 10) * f : (loud[-1] + 10) * f]
+    return a
 
 
 if __name__ == '__main__':
