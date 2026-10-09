@@ -1,15 +1,18 @@
 # HACKATHON MODE — speed over everything
 6-hour hackathon. A working demo beats clean code.
 
-## The product must work with NO internet
-- Everything runs on one computer (the "hub") and devices on the same Wi-Fi/LAN use it. No cloud services.
-- Never add a cloud API, SDK, CDN script, remote font, analytics, or anything that needs the internet at runtime.
-- AI is local (Ollama). Auth is email + password only (no email codes, no Google).
-- Exception, online extras (TEAM-PLAN.md section 9): ElevenLabs text-to-speech in `voice/`, Google Maps (JS, Geocoding, Routes)
-  with Leaflet + OpenStreetMap as the no-key fallback, and a Cloudflare tunnel for location. The core must still work with the internet off: always fall back to local.
+## Offline core, online extras
+- Everything runs on one computer (the "hub") and devices on the same Wi-Fi/LAN use it.
+- The AI is always local (Ollama). Audio, photos and memory notes never go to an online service.
+- Online services are allowed for extras (TEAM-PLAN.md section 9): Google sign-in, ElevenLabs text-to-speech in `voice/`,
+  Google Maps (JS, Geocoding, Routes) with Leaflet + OpenStreetMap as the no-key fallback, and a Cloudflare tunnel for
+  location. The core must still work with the internet off: always fall back to local (email + password login stays).
+- Google sign-in needs HTTPS and a domain name (e.g. the Cloudflare tunnel address): Google rejects return URLs on a plain
+  IP like `http://<hub-ip>:4101`. A quick tunnel's address changes every run, so update it in Google's console each time.
 
-## This project's frontend: web + mobile  ← set at kickoff: web / mobile / both
+## This project's frontend: web  ← set at kickoff: web / mobile / both
 - Only build screens in the frontend(s) named above. The web app also works in phone browsers.
+- `mobile/` is kept but not built for this project (TEAM-PLAN.md: phones open the hub URL). Don't add mobile screens.
 - Dropping one? Delete its folder (`web/` or `mobile/`) and remove it from the root `setup` and `typecheck` scripts.
 
 ## RAG (Q&A over documents): on  ← set at kickoff: on / off
