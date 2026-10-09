@@ -21,6 +21,7 @@ import { PrismaService } from './prisma.service';
 import { RagController } from './rag/rag.controller';
 import { RagService } from './rag/rag.service';
 import { RolesController } from './roles/roles.controller';
+import { SchedulerService } from './scheduler.service';
 import { TasksController } from './tasks/tasks.controller';
 import { UsersController } from './users/users.controller';
 import { VoiceController } from './voice/voice.controller';
@@ -62,6 +63,7 @@ import { VoiceController } from './voice/voice.controller';
     PrismaService,
     AiService,
     RagService,
+    SchedulerService, // Hub: rings alarms every 10 s
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
 })
