@@ -1,5 +1,6 @@
 # OWNER: voice-mouth. Text-to-speech on ONE worker thread with a queue (never talks over itself).
-# Order: cached clip (clips/<sha1>.wav) -> ElevenLabs -> Kokoro (local) -> pyttsx3. Sets state.speaking while talking.
+# Order: saved clip (clips/ or clips/cache/<sha1>.wav) -> ElevenLabs (saved to clips/cache/) -> Kokoro (local)
+# -> pyttsx3 (-> SAPI if pyttsx3 hangs). Sets state.speaking while talking.
 import hashlib
 import queue
 import threading
@@ -15,14 +16,18 @@ import state
 
 EL_RATE = 22050  # pcm_22050 works on every ElevenLabs plan
 KOKORO_VOICE = 'af_heart'
+EL_TIMEOUT = 2  # seconds to wait for ElevenLabs while someone is waiting to hear the answer
+CACHE_DIR = config.CLIPS_DIR / 'cache'  # ElevenLabs replies saved at runtime (git-ignored)
 
 _q: queue.Queue[str] = queue.Queue()
 _kokoro = None  # loaded once, on the worker thread
-_engine = None  # pyttsx3, created on the worker thread (not thread-safe)
+_pyttsx3_q: queue.Queue = queue.Queue()  # pyttsx3 lives on its own thread so a hang can be detected
+_pyttsx3_broken = False
+_sapi = None  # win32com SAPI.SpVoice, created on the worker thread
 
 
-def clip_path(text: str):
-    return config.CLIPS_DIR / f"{hashlib.sha1(text.strip().lower().encode('utf-8')).hexdigest()}.wav"
+def clip_path(text: str, folder=config.CLIPS_DIR):
+    return folder / f"{hashlib.sha1(text.strip().lower().encode('utf-8')).hexdigest()}.wav"
 
 
 def eleven(text: str, timeout: float = config.ELEVENLABS_TIMEOUT) -> np.ndarray:
@@ -53,25 +58,53 @@ def _load_kokoro():
     return _kokoro
 
 
-def _pyttsx3(text: str) -> None:
-    global _engine
-    if _engine is None:
-        import pyttsx3
-        _engine = pyttsx3.init()
-    _engine.say(text)
-    _engine.runAndWait()
+def _pyttsx3_loop() -> None:
+    import pyttsx3
+    engine = pyttsx3.init()
+    while True:
+        text, done = _pyttsx3_q.get()
+        engine.say(text)
+        engine.runAndWait()
+        done.set()
+
+
+def _sapi_say(text: str) -> None:
+    global _sapi
+    if _sapi is None:
+        import pythoncom
+        import win32com.client
+        pythoncom.CoInitialize()
+        _sapi = win32com.client.Dispatch('SAPI.SpVoice')
+    _sapi.Speak(text)
+
+
+def _local_voice(text: str) -> None:
+    global _pyttsx3_broken
+    if not _pyttsx3_broken:
+        done = threading.Event()
+        _pyttsx3_q.put((text, done))
+        if done.wait(5 + 0.15 * len(text)):
+            print(f'  [tts: pyttsx3] {text}')
+            return
+        _pyttsx3_broken = True
+        print('  (pyttsx3 hung, switching to SAPI)')
+    print(f'  [tts: sapi] {text}')
+    _sapi_say(text)
 
 
 def _speak(text: str) -> None:
-    path = clip_path(text)
-    if path.exists():
-        data, rate = sf.read(path, dtype='int16')
-        print(f'  [tts: clip] {text}')
-        return _play(data, rate)
+    for path in (clip_path(text), clip_path(text, CACHE_DIR)):
+        if path.exists():
+            data, rate = sf.read(path, dtype='int16')
+            print(f'  [tts: clip] {text}')
+            return _play(data, rate)
     try:
-        samples = eleven(text)
+        samples = eleven(text, EL_TIMEOUT)
         print(f'  [tts: elevenlabs] {text}')
-        return _play(samples, EL_RATE)
+        _play(samples, EL_RATE)
+        CACHE_DIR.mkdir(exist_ok=True)
+        sf.write(clip_path(text, CACHE_DIR), samples, EL_RATE, subtype='PCM_16')
+        return
     except Exception as e:
         print(f'  (elevenlabs skipped: {e})')
     try:
@@ -80,8 +113,7 @@ def _speak(text: str) -> None:
         return _play(samples, rate)
     except Exception as e:
         print(f'  (kokoro skipped: {e})')
-    print(f'  [tts: pyttsx3] {text}')
-    _pyttsx3(text)
+    _local_voice(text)
 
 
 def _run() -> None:
@@ -109,3 +141,4 @@ def say(text: str) -> None:
 
 
 threading.Thread(target=_run, daemon=True, name='tts').start()
+threading.Thread(target=_pyttsx3_loop, daemon=True, name='pyttsx3').start()
