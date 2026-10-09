@@ -108,18 +108,18 @@ model Alarm {
   createdAt   DateTime  @default(now())
 }
 
-// #12 #13: tasks from a parent; chores are checked by photo
+// #12: tasks and chores from a parent. The kid checks them off (no photo, no AI check); the parents see it done.
 model Task {
   id          Int       @id @default(autoincrement())
   title       String
   assigneeId  Int
   assignee    User      @relation(fields: [assigneeId], references: [id], onDelete: Cascade)
   createdById Int
-  isChore     Boolean   @default(false) // chores need before/after photos
+  isChore     Boolean   @default(false) // house chore (+10 points when done). Checked off like any task, no photo
   checklist   String[] // what "done" looks like: ["sink is empty", "dishes are in the rack"]
   dueAt       DateTime?
   status      String    @default("pending") // "pending" | "redo" | "done"
-  beforePhoto String? // base64 JPEG
+  beforePhoto String? // unused: chores have no photos (kept so the API shape stays the same)
   afterPhoto  String?
   feedback    String? // the AI's specific feedback
   createdAt   DateTime  @default(now())

@@ -12,7 +12,7 @@ export const PERMISSIONS = [
   // Family hub (TEAM-PLAN.md 4.2)
   'alarms.own', // set/see/dismiss your own alarms and reminders
   'alarms.family', // set alarms/reminders for others (#28)
-  'tasks.own', // see your tasks, send chore photos
+  'tasks.own', // see your tasks and check them off
   'tasks.assign', // give tasks to others, see everyone's
   'calendar.use',
   'budget.use',

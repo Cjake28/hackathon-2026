@@ -34,6 +34,7 @@ screens ── hooks/useHub.ts ────────────────�
    ```
    The hub prints its IP when it starts: `API on the local network: http://192.168.x.x:4101/api`. Without this line
    the app uses the computer running `expo start`, which is only right if that computer is the hub.
+   Away from home (over the internet): see section 12 (Hub address + Cloudflare tunnel).
 3. On the hub laptop: Windows Firewall → allow Node.js on **Private** networks.
 4. Accounts (from `npm run db:seed`, password `family123`): `mom@family.local`, `dad@family.local` (parents),
    `ana@family.local`, `ben@family.local` (kids). Mom and Dad can make more accounts in the app (section 8).
@@ -68,7 +69,7 @@ export type HubTask = {
   checklist: string[]; // what "done" looks like
   dueAt: string | null;
   status: 'pending' | 'redo' | 'done';
-  beforePhoto: string | null;
+  beforePhoto: string | null; // unused: chores have no photos
   afterPhoto: string | null;
   feedback: string | null;
   createdAt: string;
@@ -81,7 +82,8 @@ export type NoticeKind =
   | 'presence:arrived'
   | 'presence:left'
   | 'voice:heard'
-  | 'intercom';
+  | 'intercom'
+  | 'alarm:ignored'; // parents: a kid's alarm rang 2 min with no dismiss
 export type HubNotice = {
   id: number;
   toUserId: number | null; // null = every device
@@ -546,6 +548,7 @@ export function HubListener() {
 function showNotice(notice: HubNotice) {
   if (notice.kind === 'task:new') Alert.alert('New task', notice.text); // "Mom: Wash the dishes"
   if (notice.kind === 'task:reviewed') Alert.alert('Task done ✓', notice.text); // parents: "Ana finished: Wash the dishes"
+  if (notice.kind === 'alarm:ignored') Alert.alert('⏰ Alarm still ringing', notice.text); // parents: "Ana's alarm has been ringing for 2 minutes."
   if (notice.kind === 'intercom') Alert.alert('📢 Announcement', notice.text); // "Announcement from Mom: dinner's ready"
 }
 ```
@@ -846,6 +849,7 @@ useEffect(() => {
 
 | What | Endpoint | Who |
 |---|---|---|
+| Is a hub there? | `GET /hub` → `{ ips }` (no login; the Hub address check uses it) | anyone |
 | Log in / me | `POST /auth/login { email, password }` → `{ user, token }`, `GET /auth/me` | everyone |
 | Poll (every 3 s) | `GET /device/poll?after=<cursor>` → `{ cursor, notices, ringing, home }` | everyone |
 | Family + who's home | `GET /family` → `Person[]` | family (guests get `[]`) |
@@ -864,6 +868,7 @@ useEffect(() => {
 | `alarm:ring` | the alarm's owner | nothing extra: `ringing[]` drives the full-screen alarm |
 | `task:new` | the kid | "New task" popup: "Mom: Wash the dishes" |
 | `task:reviewed` | parents | "Task done ✓": "Ana finished: Wash the dishes" |
+| `alarm:ignored` | parents | "⏰ Alarm still ringing": "Ana's alarm has been ringing for 2 minutes." (the hub says it too) |
 | `intercom` | everyone | big banner: "Announcement from Mom: dinner's ready" |
 | `voice:heard` | family | "Jarvis heard…" feed (`useHeard()`) |
 | `presence:arrived` / `presence:left` | family | optional toast; the family list refreshes by itself |
@@ -877,5 +882,310 @@ useEffect(() => {
 4. Mom gives Ana a task → "New task" pops up on Ana's phone.
 5. Ana checks it off → Mom's phone: "Task done ✓ — Ana finished: …".
 6. Mom (Settings → Accounts) adds "Lola" with a new role → Lola logs in on another phone.
+
+## 12. Talk to Jarvis from anywhere: over the internet, by voice
+
+Ana is at school, asks her phone, and Jarvis on the hub laptop answers. **The AI stays on the hub laptop.** Only text
+goes over the internet (HTTPS through a Cloudflare tunnel), so "the AI is local" stays true.
+
+```
+Phone (anywhere) ── https://….trycloudflare.com/api ──▶ Cloudflare tunnel ──▶ hub laptop :4101 ──▶ Jarvis (local AI)
+   🎤 keyboard dictation → text → POST /voice/text                            ◀── reply text
+   🔊 Speech.speak(reply): the phone's own voice, works offline
+```
+
+### 12.1 On the hub laptop: open the tunnel
+
+> ⚠️ **Change the seeded passwords first.** `family123` and `admin12345` are in the GitHub repo, and the tunnel puts
+> the hub on the internet. Set new passwords with `useUpdateUser().mutate({ id, password })` (add a "New password"
+> field to the Accounts screen) or ask the Hub dev, and delete `admin@example.com` (Accounts → Delete).
+
+```
+cloudflared tunnel --url http://localhost:4101
+```
+
+It prints `https://<random words>.trycloudflare.com`. **That address changes every time the tunnel restarts**, so paste
+the new one in the app (12.3). Install: `winget install --id Cloudflare.cloudflared`.
+
+Everything in the app works through the tunnel (login, Jarvis, alarms, tasks…). By design:
+- A phone polling through the tunnel doesn't count as "home" (it may be at school).
+- The hub mic's endpoint (`/voice/command`) refuses tunnel requests.
+- Jarvis answers at most 20 turns a minute per phone.
+
+### 12.2 Replace `mobile/lib/api.ts`
+
+Same as before, plus a hub address the phone can change and save (`hubAddress`). Nothing else in the app changes.
+
+```ts
+import Constants from 'expo-constants';
+import { fetch as streamingFetch } from 'expo/fetch';
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+
+// The hub's address. Default: EXPO_PUBLIC_API_URL, else the computer running `expo start` (a phone or emulator can't
+// reach "localhost", but it can reach the dev server's IP). The phone can change it in Settings → Hub address, e.g. to
+// the Cloudflare tunnel to reach the hub away from home (docs/mobile-hub.md section 12).
+const host = Constants.expoConfig?.hostUri?.split(':')[0] ?? 'localhost';
+export const DEFAULT_API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${host}:4101/api`;
+
+// A saved value: SecureStore on phones, localStorage on Expo web.
+const stored = (key: string) => ({
+  get: async () => (Platform.OS === 'web' ? localStorage.getItem(key) : SecureStore.getItemAsync(key)),
+  set: async (value: string) =>
+    Platform.OS === 'web' ? localStorage.setItem(key, value) : SecureStore.setItemAsync(key, value),
+  clear: async () => (Platform.OS === 'web' ? localStorage.removeItem(key) : SecureStore.deleteItemAsync(key)),
+});
+
+// The session token from login.
+export const token = stored('token');
+
+const savedHub = stored('hubUrl');
+let apiUrl = DEFAULT_API_URL;
+// Read the saved hub address once; every request waits for it.
+const loaded = savedHub
+  .get()
+  .then((url) => {
+    if (url) apiUrl = url;
+  })
+  .catch(() => {});
+
+// "https://abc.trycloudflare.com" → "https://abc.trycloudflare.com/api", "192.168.1.20:4101" → "http://192.168.1.20:4101/api"
+export function normalizeHubUrl(input: string) {
+  let url = input.trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(url)) url = `http://${url}`;
+  if (!/\/api$/i.test(url)) url = `${url}/api`;
+  return url;
+}
+
+export const hubAddress = {
+  get: async () => {
+    await loaded;
+    return apiUrl;
+  },
+  // Empty → back to the default (home Wi-Fi). The login stays: it's the same hub, reached another way.
+  set: async (input: string) => {
+    await loaded;
+    apiUrl = input.trim() ? normalizeHubUrl(input) : DEFAULT_API_URL;
+    if (apiUrl === DEFAULT_API_URL) await savedHub.clear();
+    else await savedHub.set(apiUrl);
+    return apiUrl;
+  },
+  // true when a hub answers at this address (GET /api/hub needs no login).
+  test: (input: string) =>
+    fetch(`${input.trim() ? normalizeHubUrl(input) : DEFAULT_API_URL}/hub`)
+      .then((res) => res.ok)
+      .catch(() => false),
+};
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function authHeaders(json: boolean) {
+  const headers: Record<string, string> = {};
+  const session = await token.get();
+  if (session) headers.Authorization = `Bearer ${session}`;
+  if (json) headers['Content-Type'] = 'application/json';
+  return headers;
+}
+
+const unreachable = () =>
+  new ApiError(`Can't reach the hub at ${apiUrl}. Same Wi-Fi? Away from home: set Settings → Hub address.`, 0);
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  await loaded;
+  const headers = await authHeaders(body !== undefined);
+  const res = await fetch(`${apiUrl}${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+    credentials: 'omit', // the bearer token is the session; ignore the web cookie
+  }).catch(() => {
+    throw unreachable();
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new ApiError(data?.message ?? `${res.status} ${res.statusText}`, res.status);
+  return data as T;
+}
+
+export const api = {
+  get: <T>(path: string) => request<T>('GET', path),
+  post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
+  patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
+  delete: <T>(path: string) => request<T>('DELETE', path),
+};
+
+// Streams whose first line is JSON (e.g. { sources }) and the rest is text (the AI's answer).
+export async function streamWithHeader<T>(
+  path: string,
+  body: unknown,
+  onHeader: (header: T) => void,
+  onText: (text: string) => void,
+  signal?: AbortSignal,
+) {
+  let buffer = '';
+  let headerDone = false;
+  await streamText(path, body, (text) => {
+    if (headerDone) return onText(text);
+    buffer += text;
+    const newline = buffer.indexOf('\n');
+    if (newline === -1) return;
+    headerDone = true;
+    onHeader(JSON.parse(buffer.slice(0, newline)));
+    if (buffer.length > newline + 1) onText(buffer.slice(newline + 1));
+  }, signal);
+}
+
+// POSTs and reads a streamed text reply (AI chat). React Native's fetch can't stream; expo/fetch can.
+export async function streamText(
+  path: string,
+  body: unknown,
+  onText: (text: string) => void,
+  signal?: AbortSignal, // abort() = stop the answer (the hub stops generating too)
+) {
+  await loaded;
+  const res = await streamingFetch(`${apiUrl}${path}`, {
+    method: 'POST',
+    headers: await authHeaders(true),
+    body: JSON.stringify(body),
+    credentials: 'omit',
+    signal,
+  }).catch((error) => {
+    throw signal?.aborted ? error : unreachable();
+  });
+  if (!res.ok || !res.body) {
+    const data = await res.json().catch(() => null);
+    throw new ApiError(data?.message ?? `${res.status} ${res.statusText}`, res.status);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    onText(decoder.decode(value, { stream: true }));
+  }
+}
+```
+
+### 12.3 New file `mobile/components/HubAddress.tsx`
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { Pressable, View } from 'react-native';
+import { Input } from '@/components/ui/input';
+import { Text } from '@/components/ui/text';
+import { DEFAULT_API_URL, hubAddress } from '@/lib/api';
+
+// Settings → "Hub address" (also on the login screen, so a new phone can find the hub).
+// At home: leave it empty (home Wi-Fi). Away from home: paste the tunnel address the hub laptop shows
+// (https://….trycloudflare.com). It changes every time the tunnel restarts.
+export function HubAddress() {
+  const qc = useQueryClient();
+  const [value, setValue] = useState('');
+  const [status, setStatus] = useState('');
+
+  useEffect(() => {
+    hubAddress.get().then((url) => setValue(url === DEFAULT_API_URL ? '' : url));
+  }, []);
+
+  const save = async () => {
+    setStatus('Checking…');
+    if (!(await hubAddress.test(value))) {
+      setStatus('No hub answers at that address. Check it, and that the tunnel runs on the hub laptop.');
+      return;
+    }
+    const url = await hubAddress.set(value);
+    setStatus(`Connected: ${url}`);
+    qc.invalidateQueries(); // reload everything from the hub at its new address
+  };
+
+  return (
+    <View className="gap-2">
+      <Text variant="label">Hub address</Text>
+      <Text variant="muted">Empty = home Wi-Fi. Away from home: the tunnel address from the hub laptop.</Text>
+      <Input
+        testID="hub-address"
+        placeholder="https://….trycloudflare.com"
+        autoCapitalize="none"
+        autoCorrect={false}
+        value={value}
+        onChangeText={setValue}
+      />
+      <Pressable testID="hub-address-save" onPress={save} className="rounded-3xl bg-primary p-3">
+        <Text className="text-center text-primary-foreground">Save</Text>
+      </Pressable>
+      {!!status && <Text variant="muted">{status}</Text>}
+    </View>
+  );
+}
+```
+
+Put `<HubAddress />` in **Settings** and at the bottom of the **login screen**. A new phone away from home has to find
+the hub before it can log in.
+
+```tsx
+import { HubAddress } from '@/components/HubAddress';
+
+// …in the screen's JSX:
+<HubAddress />
+```
+
+### 12.4 `talk.tsx`: say Jarvis's replies out loud, and a mic that works
+
+`expo-speech` is already installed. Four small changes:
+
+```tsx
+import * as Speech from 'expo-speech';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View, type TextInput } from 'react-native';
+
+// 1. next to the other state:
+const inputRef = useRef<TextInput>(null);
+useEffect(() => () => {
+  void Speech.stop(); // leaving the screen stops the talking
+}, []);
+
+// 2. in send(), inside onSuccess, after setPending(reply.pending):
+Speech.stop();
+Speech.speak(reply.reply); // the phone's own voice, works offline
+
+// 3. the big mic circle becomes a Pressable that opens the keyboard (its 🎤 key does the speech-to-text):
+<Pressable
+  testID="talk-mic"
+  onPress={() => inputRef.current?.focus()}
+  className="h-24 w-24 items-center justify-center rounded-full bg-primary"
+>
+  <Icon as={Microphone} weight="fill" size={32} className="text-primary-foreground" />
+</Pressable>
+
+// 4. the text input gets the ref:
+<Input ref={inputRef} testID="talk-input" … />
+```
+
+**Talking into the phone:** tap 🎤 → the keyboard opens → tap the keyboard's mic and talk → Send. No extra code.
+
+Privacy: keyboard dictation (Gboard, iPhone) may send the recording to Google/Apple. On the phone, say "Jarvis's
+brain never leaves the house" rather than "your voice never leaves the house". The hub's own mic (Voice dev) stays
+fully local.
+
+Later, if there's time: an in-app mic with `expo-speech-recognition` (needs a dev build, not Expo Go), or the phone
+sends the recording to the hub's own Whisper. That's the most private option, but it needs a new hub endpoint: ask the Hub dev.
+
+### 12.5 Check it (away from home)
+
+1. Hub laptop: `cloudflared tunnel --url http://localhost:4101` → copy the `https://…trycloudflare.com` address.
+2. Phone on **mobile data** (Wi-Fi off): Settings → Hub address → paste → Save → "Connected: …".
+3. Talk: "What's on the grocery list?" → Jarvis answers, and the phone says it out loud.
+4. Back home: clear the Hub address → Save (home Wi-Fi again).
+
+A release APK blocks plain `http://` addresses (home Wi-Fi) unless cleartext is allowed (`expo-build-properties` →
+`android.usesCleartextTraffic: true`). Debug builds and Expo Go allow it, and the tunnel is HTTPS anyway.
+
+---
 
 Need a change in the API? Ask the Hub dev. Don't change `api/`: the routes and JSON shapes above are the contract.
