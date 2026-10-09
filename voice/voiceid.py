@@ -68,3 +68,28 @@ def identify(audio: np.ndarray) -> tuple[int | None, str | None, float]:
     if s[uid] >= config.ID_THRESHOLD:
         return uid, _name(uid), s[uid]
     return None, None, s[uid]
+
+
+if __name__ == '__main__':
+    # python voiceid.py [--mock] [--seconds 4]: record once, print every profile's score (threshold tuning).
+    import argparse
+
+    import sounddevice as sd
+
+    p = argparse.ArgumentParser()
+    p.add_argument('--mock', action='store_true')
+    p.add_argument('--seconds', type=float, default=4)
+    args = p.parse_args()
+    config.MOCK = args.mock
+    _load()
+    input(f'Press Enter, then speak for {args.seconds:g} s...')
+    a = sd.rec(int(args.seconds * config.SAMPLE_RATE), samplerate=config.SAMPLE_RATE, channels=1, dtype='float32')
+    sd.wait()
+    s = scores(a[:, 0])
+    for uid, sc in sorted(s.items(), key=lambda x: -x[1]):
+        print(f'  {_name(uid):>10} (id {uid}): {sc:.3f}')
+    best = max(s, key=s.get) if s else None
+    if best is not None and s[best] >= config.ID_THRESHOLD:
+        print(f'-> {_name(best)} ({s[best]:.3f} >= {config.ID_THRESHOLD})')
+    else:
+        print(f'-> unknown / guest (threshold {config.ID_THRESHOLD})')
