@@ -1,6 +1,7 @@
 # The voice loop: python main.py [--mock] [--wake]
 # Push-to-talk: Enter = record. Type 1-5 then Enter = force the next speaker, 0 = automatic.
 import argparse
+import sys
 
 import config
 import state
@@ -9,6 +10,7 @@ p = argparse.ArgumentParser()
 p.add_argument('--mock', action='store_true', help='no hub needed: print what would be sent')
 p.add_argument('--wake', action='store_true', help='"hey jarvis" instead of push-to-talk')
 args = p.parse_args()
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # Tagalog text in a piped/redirected console (cp1252) crashed print()
 config.MOCK = args.mock
 
 import audio, hub, server, stt, tts, voiceid, wake  # noqa: E402  (after config.MOCK is set)
