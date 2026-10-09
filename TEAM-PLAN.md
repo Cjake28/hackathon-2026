@@ -538,14 +538,14 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
    - **Everyone:** `npm run db:seed` after pulling (new `intercom.send` permission).
 4. **Not doing:** a smaller model or a lower quantization. `qwen3.5:4b` is already Q4_K_M, fits 100% on the GPU and
    answers in 1–3 s; going smaller makes it dumber for a speed problem we no longer have.
-5. **Now (user: "do all of that"), in this order, each tested and pushed on its own:**
-   1. **Brain offline safety net:** if the AI fails, Jarvis says "Sorry, my brain is restarting. Alarms and reminders
+5. **Done (user: "do all of that"), each tested and pushed on its own; demo lines still 110/110:**
+   1. **Done (+ a 15 s time limit: a reload made a turn wait 45 s). Brain offline safety net:** if the AI fails, Jarvis says "Sorry, my brain is restarting. Alarms and reminders
       still work." instead of going silent (`voice.controller.ts`).
-   2. **Talking to Jarvis = home:** a voice recognized at the hub mic marks that person home (`lastSeenAt`), so
+   2. **Done. Talking to Jarvis = home:** a voice recognized at the hub mic marks that person home (`lastSeenAt`), so
       "who's home" works without their phone (`/voice/command` only, not typed or tunnelled).
-   3. **Wake-up alarm dismissed → good-morning briefing:** the hub says Ana's briefing right after she taps Dismiss
+   3. **Done. Wake-up alarm dismissed → good-morning briefing:** the hub says Ana's briefing right after she taps Dismiss
       (Brain helper; one call added in **Hub's** `alarms.controller.ts` dismiss).
-   4. **Alarm escalation (#27):** a kid's alarm still ringing after 2 min → notice to the parents + the hub says
+   4. **Done. Alarm escalation (#27):** a kid's alarm still ringing after 2 min → notice to the parents + the hub says
       "Ana's alarm has been ringing for 2 minutes" (in **Hub's** `scheduler.service.ts`).
    5. **~~Phone screens (web)~~ Skipped:** the team set the frontend to **mobile** (`CLAUDE.md`) and the Hub dev wrote
       `docs/mobile-hub.md` for the UI dev (login, `useHub.ts`, poll + full-screen alarm + popups). Brain adds no web
@@ -556,10 +556,10 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
       popup, chore before/after photos with the real AI check, intercom banner, points) and a parent hub page
       (family + who's home, points, "Jarvis heard…" feed, tasks with photos, talk to Jarvis with Yes/No). Backup for
       the mobile app until it's connected.
-   6. **"Cancel that" / undo:** right after "Done!", undoes the alarm / task / grocery items / event / expense / memory.
-   7. **Prompt caching:** fixed system prompt + tools, the changing parts (time, speaker, family, memory) in the user
+   6. **Done. "Cancel that" / undo:** right after "Done!", undoes the alarm / task / grocery items / event / expense / memory.
+   7. **Skipped after measuring (0.3 s, below the bar; Ollama didn't reuse it anyway). Prompt caching:** fixed system prompt + tools, the changing parts (time, speaker, family, memory) in the user
       message, so the AI skips re-reading ~1,600 tokens. Measure first; skip if the gain is under 0.3 s.
-   8. **Several actions at once:** "give Ana the dishes and remind her in 10 minutes" → one "Say yes" for both.
+   8. **Done. Several actions at once** (before, the second one was silently dropped): "give Ana the dishes and remind her in 10 minutes" → one "Say yes" for both.
    Hub dev: items 3 and 4 touch your files (small, marked "Brain"); pull before editing them.
 
 ### Voice dev

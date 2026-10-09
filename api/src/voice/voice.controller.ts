@@ -25,13 +25,10 @@ import { PrismaService } from '../prisma.service';
 import { RagService } from '../rag/rag.service';
 
 type VoiceCommand = { speakerId: number | null; confidence: number; text: string };
-type PendingAction = {
-  tool: string;
-  args: unknown;
-  description: string;
-  status: 'pending' | 'done' | 'cancelled' | 'undone';
-  undo?: number[]; // ids of what it created, for "cancel that"
-};
+type Step = { tool: string; args: unknown; description: string; undo?: number[] }; // undo: ids it created
+// One "Say yes" can cover several changes: the first in tool/args, the rest in `also` (the web chat's Confirm card reads
+// tool/args/description/status, so a single action looks exactly as before).
+type PendingAction = Step & { status: 'pending' | 'done' | 'cancelled' | 'undone'; also?: Step[] };
 type Answer = { text: string; action?: PendingAction };
 
 const GUEST_EMAIL = 'guest@family.local'; // every unknown voice speaks as this user (seed.ts)
@@ -180,23 +177,27 @@ export class VoiceController {
     const approve = fresh && YES.test(word);
     let status: PendingAction['status'] = 'cancelled';
     let answer: Answer | null = fresh && NO.test(word) ? { text: 'Okay, cancelled.' } : null;
-    let undo: number[] | undefined;
+    const created: (number[] | undefined)[] = []; // per step: the ids it created (for "cancel that")
 
     if (approve) {
-      const tool = toolsFor(user).find((t) => t.name === action.tool);
       try {
-        if (!tool) throw new ForbiddenException("you're not allowed to do that.");
-        const result = await runTool(tool, action.args, { prisma: this.prisma, rag: this.rag, user });
-        status = 'done';
+        for (const step of [action, ...(action.also ?? [])]) {
+          // Permissions are checked again now, not when the AI proposed it.
+          const tool = toolsFor(user).find((t) => t.name === step.tool);
+          if (!tool) throw new ForbiddenException("you're not allowed to do that.");
+          const result = await runTool(tool, step.args, { prisma: this.prisma, rag: this.rag, user });
+          created.push(UNDOERS[step.tool] ? (Array.isArray(result) ? result : [result]).map((r: { id: number }) => r.id) : undefined);
+          status = 'done'; // even if a later step fails, the ones that ran stay undoable
+        }
         answer = { text: `Done! ${action.description}.` };
-        if (UNDOERS[action.tool]) undo = (Array.isArray(result) ? result : [result]).map((r: { id: number }) => r.id);
       } catch (error) {
         answer = { text: this.sorry(user, error) };
       }
     }
+    const also = action.also?.map((step, i) => ({ ...step, undo: created[i + 1] }));
     await this.prisma.conversationMessage.update({
       where: { id: last.id },
-      data: { action: { ...action, status, undo } as Prisma.InputJsonValue },
+      data: { action: { ...action, status, undo: created[0], ...(also ? { also } : {}) } as Prisma.InputJsonValue },
     });
     return answer;
   }
@@ -212,8 +213,9 @@ export class VoiceController {
     });
     const done = recent.find((m) => (m.action as PendingAction | null)?.status === 'done');
     const action = done?.action as PendingAction | undefined;
-    if (!done || !action?.undo?.length || !UNDOERS[action.tool]) return { text: "There's nothing I can undo right now." };
-    await UNDOERS[action.tool](this.prisma, action.undo);
+    const steps = action ? [action, ...(action.also ?? [])].filter((s) => s.undo?.length && UNDOERS[s.tool]) : [];
+    if (!done || !action || !steps.length) return { text: "There's nothing I can undo right now." };
+    for (const step of steps) await UNDOERS[step.tool](this.prisma, step.undo!);
     await this.prisma.conversationMessage.update({
       where: { id: done.id },
       data: { action: { ...action, status: 'undone' } as Prisma.InputJsonValue },
@@ -265,6 +267,9 @@ export class VoiceController {
         }
         messages.push(reply);
 
+        // "Give Ana the dishes and remind her in 10 minutes": the model asks for both in one step. Every change is
+        // collected and proposed together (one "Say yes"); before, the second one was silently dropped.
+        const proposals: Step[] = [];
         for (const call of calls) {
           const tool = tools.find((t) => t.name === call.function.name);
           const args = tool?.params.safeParse(call.function.arguments);
@@ -273,20 +278,29 @@ export class VoiceController {
             continue;
           }
           if (tool.confirm) {
-            await checkTool(tool, args.data, deps);
+            await checkTool(tool, args.data, deps); // a refusal stops the whole request (spoken below)
             // Trailing punctuation off ("Aalis na ako." would become "Aalis na ako.? Say yes").
             const description = ((tool.describe as ((a: unknown) => string) | undefined)?.(args.data) ?? tool.name).replace(
               /[.!?\s]+$/,
               '',
             );
-            return {
-              text: `${description}? Say yes to confirm.`,
-              action: { tool: tool.name, args: args.data, description, status: 'pending' },
-            };
+            proposals.push({ tool: tool.name, args: args.data, description });
+            continue;
           }
           const result = await runTool(tool, args.data, deps);
           const content = typeof result === 'string' ? result : JSON.stringify(result);
           messages.push({ role: 'tool', tool_name: tool.name, content: content.slice(0, 6000) });
+        }
+        if (proposals.length) {
+          const [first, ...also] = proposals;
+          // "Give Ana a chore: Wash the dishes, and set a reminder …" (lowercase after the first)
+          const description = proposals
+            .map((p, i) => (i ? p.description[0].toLowerCase() + p.description.slice(1) : p.description))
+            .join(', and ');
+          return {
+            text: `${description}? Say yes to confirm.`,
+            action: { ...first, description, status: 'pending', ...(also.length ? { also } : {}) },
+          };
         }
       }
       return { text: 'Sorry, that took too many steps. Try asking for one thing at a time.' };

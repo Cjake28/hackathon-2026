@@ -37,7 +37,13 @@ const WITH_TOOLS =
 const MAX_IMAGE_MB = 4;
 
 type ConversationInput = { title?: string; useDocs?: boolean; useTools?: boolean };
-type PendingAction = { tool: string; args: unknown; description: string; status: 'pending' | 'done' | 'cancelled' };
+type PendingAction = {
+  tool: string;
+  args: unknown;
+  description: string;
+  status: 'pending' | 'done' | 'cancelled';
+  also?: { tool: string; args: unknown }[]; // more actions under the same Confirm (Jarvis voice, voice.controller.ts)
+};
 
 // Saved AI chats, one list per user. Sending a message streams the reply:
 // first line JSON { sources }, then the answer text (read by useSendMessage in hooks/useConversations.ts).
@@ -171,10 +177,12 @@ export class ConversationsController {
     let status: PendingAction['status'] = 'cancelled';
     let note = `Cancelled: ${action.description}.`;
     if (body.approve) {
-      // Permissions are checked again now, not when the AI proposed it.
-      const tool = toolsFor(user).find((t) => t.name === action.tool);
-      if (!tool) throw new ForbiddenException('You are not allowed to do that');
-      await runTool(tool, action.args, { prisma: this.prisma, rag: this.rag, user });
+      // Permissions are checked again now, not when the AI proposed it. `also`: Jarvis voice actions can group several.
+      for (const step of [action, ...(action.also ?? [])]) {
+        const tool = toolsFor(user).find((t) => t.name === step.tool);
+        if (!tool) throw new ForbiddenException('You are not allowed to do that');
+        await runTool(tool, step.args, { prisma: this.prisma, rag: this.rag, user });
+      }
       status = 'done';
       note = `Done: ${action.description}.`;
     }
