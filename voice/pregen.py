@@ -25,5 +25,5 @@ if '--dry' in sys.argv or not todo:
     sys.exit()
 
 for text in todo:
-    sf.write(tts.clip_path(text), tts.eleven(text, timeout=30), tts.EL_RATE, subtype='PCM_16')
+    sf.write(tts.clip_path(text), tts.eleven(text, timeout=30, model=tts.PREGEN_MODEL), tts.EL_RATE, subtype='PCM_16')
     print('  made', text)
