@@ -144,6 +144,7 @@ export type Task = {
 export type NoticeKind =
   | 'alarm:ring'
   | 'alarm:ignored' // a kid's alarm rang 2 min with no dismiss; sent to the parents. data: { alarmId, userId }
+  | 'event:soon' // a calendar event starts in 15 min; to that person (null = every device). data: { eventId }
   | 'task:new'
   | 'task:reviewed'
   | 'presence:arrived'

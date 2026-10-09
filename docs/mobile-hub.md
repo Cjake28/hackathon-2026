@@ -11,6 +11,7 @@ Jarvis. This guide connects it to the hub, so that:
 The design stays yours: you only swap where the data comes from.
 
 **Every file below was typechecked against the current `mobile/` (`tsc` passes).** The hub endpoints are live on `main`.
+**What's still left to do in the app: `docs/mobile-todo.md`.**
 Copy the files as they are, then wire your screens (section 6).
 
 ```
@@ -83,7 +84,8 @@ export type NoticeKind =
   | 'presence:left'
   | 'voice:heard'
   | 'intercom'
-  | 'alarm:ignored'; // parents: a kid's alarm rang 2 min with no dismiss
+  | 'alarm:ignored' // parents: a kid's alarm rang 2 min with no dismiss
+  | 'event:soon'; // a calendar event starts in 15 min (section 13)
 export type HubNotice = {
   id: number;
   toUserId: number | null; // null = every device
@@ -856,6 +858,7 @@ useEffect(() => {
 | Alarms | `GET/POST /alarms`, `PATCH/DELETE /alarms/:id`, `POST /alarms/:id/dismiss`, `/snooze` | `alarms.own`; others' alarms `alarms.family` |
 | Tasks | `GET /tasks` (`?all=1` parents), `POST /tasks` (parents), `PATCH /tasks/:id { status }`, `DELETE` (parents) | `tasks.own` / `tasks.assign` |
 | Talk to Jarvis | `POST /voice/text { text }` → `{ reply, pending }` (max 10 per minute) | `ai.use` |
+| Calendar | `GET /events` (from today), `POST /events { title, startsAt, userId? }`, `PATCH/DELETE /events/:id` | `calendar.use`; change/delete: whoever added it, or a parent |
 | Points | `GET /points` → `[{ name, points, choresDone }]` | everyone |
 | Briefing | `GET /briefing` → `{ text }` | `ai.use` |
 | Memory | `GET /memory`, `DELETE /memory/:id` | `memory.own` |
@@ -869,6 +872,7 @@ useEffect(() => {
 | `task:new` | the kid | "New task" popup: "Mom: Wash the dishes" |
 | `task:reviewed` | parents | "Task done ✓": "Ana finished: Wash the dishes" |
 | `alarm:ignored` | parents | "⏰ Alarm still ringing": "Ana's alarm has been ringing for 2 minutes." (the hub says it too) |
+| `event:soon` | that person (everyone for a family event) | "📅 Coming up": "Ana, piano lesson in 15 minutes." (the hub says it too) |
 | `intercom` | everyone | big banner: "Announcement from Mom: dinner's ready" |
 | `voice:heard` | family | "Jarvis heard…" feed (`useHeard()`) |
 | `presence:arrived` / `presence:left` | family | optional toast; the family list refreshes by itself |
@@ -1185,6 +1189,205 @@ sends the recording to the hub's own Whisper. That's the most private option, bu
 
 A release APK blocks plain `http://` addresses (home Wi-Fi) unless cleartext is allowed (`expo-build-properties` →
 `android.usesCleartextTraffic: true`). Debug builds and Expo Go allow it, and the tunnel is HTTPS anyway.
+
+## 13. Calendar: Jarvis as a personal assistant
+
+The hub already does this by voice (or typed in Talk). The calendar screen only has to show it.
+
+```
+"Hey Jarvis, add piano for Ana on Saturday at 4"  → add_event    → "Add "piano" … Saturday 4:00 PM? Say yes." → saved on the hub
+"What's on the calendar this week?"               → list_events  → Jarvis reads them out
+"Move the parents meeting to 6 PM"                → move_event   → "Move event #12 to … 6:00 PM? Say yes."
+"Cancel the dentist"                              → cancel_event → "Delete event #13 from the calendar? Say yes."
+15 minutes before an event                        → event:soon notice on the phone + the hub says "Ana, piano lesson in 15 minutes."
+```
+
+Only whoever added an event, or a parent, may move or cancel it. Ana asking to cancel the meeting Mom added hears
+right away: "Mom added that event, so only a parent can change it." The app gets the same rule (`PATCH` / `DELETE /events/:id`).
+
+### 13.1 Types: `mobile/types.ts`
+
+Add `'event:soon'` (and `'alarm:ignored'`, if it isn't there yet) to `NoticeKind`, then add at the end:
+
+```ts
+// A calendar event on the hub (GET /events). userId null = the whole family.
+export type HubEvent = {
+  id: number;
+  title: string;
+  startsAt: string;
+  userId: number | null;
+  createdById: number; // whoever added it (they, or a parent, may move or delete it)
+  createdAt: string;
+};
+```
+
+### 13.2 Hooks: add to the end of `mobile/hooks/useHub.ts`
+
+Also add `HubEvent` to the `import type { … } from '@/types'` line at the top, and this line to `REFRESH`:
+`'event:soon': ['events'],`
+
+```ts
+// ---- Calendar ----
+// Jarvis adds, moves and cancels events by voice ("Hey Jarvis, piano for Ana on Saturday at 4"). 15 min before each
+// event the phone gets an event:soon notice and the hub says it. Changing or deleting an event: whoever added it, or a
+// parent (anyone else gets the hub's alert: "Mom added that event, so only a parent can change it.").
+
+// From today on, soonest first.
+export const useEvents = () => useQuery({ queryKey: ['events'], queryFn: () => api.get<HubEvent[]>('/events') });
+
+// startsAt: ISO date-time. userId: whose it is (null or left out = the whole family).
+export const useCreateEvent = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { title: string; startsAt: string; userId?: number | null }) => api.post<HubEvent>('/events', data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['events'] }),
+  });
+};
+
+// Move (startsAt), rename (title) or change whose it is (userId).
+export const useUpdateEvent = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: number; title?: string; startsAt?: string; userId?: number | null }) =>
+      api.patch<HubEvent>(`/events/${id}`, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['events'] }),
+  });
+};
+
+export const useDeleteEvent = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete<HubEvent>(`/events/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['events'] }),
+  });
+};
+```
+
+### 13.3 `components/HubListener.tsx`: the 15-minute heads-up
+
+In `showNotice()`:
+
+```tsx
+if (notice.kind === 'event:soon') Alert.alert('📅 Coming up', notice.text); // "Ana, piano lesson in 15 minutes."
+```
+
+### 13.4 Replace `mobile/app/(app)/calendar.tsx`
+
+Your design, with the data from the hub instead of the `EVENTS` list. "Add, move or cancel with Jarvis" opens Talk;
+long-press an event to delete it.
+
+```tsx
+import { router } from 'expo-router';
+import { CalendarBlank, Microphone } from 'phosphor-react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { EmptyState } from '@/components/EmptyState';
+import { FamilyAvatar } from '@/components/FamilyAvatar';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardList } from '@/components/ui/card';
+import { Icon } from '@/components/ui/icon';
+import { Text } from '@/components/ui/text';
+import { useDeleteEvent, useEvents, useHubFamily } from '@/hooks/useHub';
+import type { HubEvent } from '@/types';
+
+const DAY = new Intl.DateTimeFormat('en-PH', { weekday: 'long', day: 'numeric', month: 'long' });
+const CLOCK = new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit' });
+
+/** Group events into day buckets, earliest first. */
+function byDay(events: HubEvent[]) {
+  const sorted = [...events].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const days = new Map<string, HubEvent[]>();
+  for (const event of sorted) {
+    const key = DAY.format(new Date(event.startsAt));
+    days.set(key, [...(days.get(key) ?? []), event]);
+  }
+  return [...days.entries()];
+}
+
+// The family calendar, from the hub. Jarvis adds, moves and cancels events by voice ("Hey Jarvis, piano for Ana on
+// Saturday at 4"); 15 min before each one the phone gets a heads-up. Long-press an event to delete it.
+export default function CalendarScreen() {
+  const { data: events = [] } = useEvents();
+  const { data: family = [] } = useHubFamily();
+  const remove = useDeleteEvent();
+  const days = byDay(events);
+
+  const askDelete = (event: HubEvent) =>
+    Alert.alert(`Delete "${event.title}"?`, undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => remove.mutate(event.id) },
+    ]);
+
+  return (
+    <View className="flex-1 bg-background">
+      <ScreenHeader title="Calendar" subtitle={`${events.length} coming up`} back />
+
+      <ScrollView className="flex-1" contentContainerClassName="gap-6 px-4 pb-10">
+        <Button testID="calendar-add" onPress={() => router.push('/talk')}>
+          <Icon as={Microphone} weight="fill" className="text-primary-foreground" />
+          <Text>Add, move or cancel with Jarvis</Text>
+        </Button>
+        {days.length === 0 ? (
+          <EmptyState
+            icon={CalendarBlank}
+            title="Nothing planned"
+            subtitle={'Say "Hey Jarvis, piano on Saturday at 4" and it\'ll land here.'}
+          />
+        ) : (
+          days.map(([day, dayEvents]) => (
+            <View key={day} className="gap-2">
+              <Text variant="label">{day}</Text>
+              <Card className="p-4">
+                <CardList>
+                  {dayEvents.map((event) => {
+                    const person = family.find((p) => p.id === event.userId);
+                    return (
+                      <Pressable
+                        key={event.id}
+                        testID={`event-${event.id}`}
+                        onLongPress={() => askDelete(event)}
+                        className="flex-row items-center gap-3 py-2.5"
+                      >
+                        {person ? (
+                          <FamilyAvatar member={person} size={36} />
+                        ) : (
+                          <View className="h-9 w-9 items-center justify-center rounded-full bg-primary-soft">
+                            <Text variant="small" className="text-primary-soft-foreground">All</Text>
+                          </View>
+                        )}
+                        <View className="flex-1 gap-0.5">
+                          <Text className="font-medium" numberOfLines={1}>{event.title}</Text>
+                          <Text variant="muted">{person?.name ?? 'Whole family'}</Text>
+                        </View>
+                        <Badge variant="secondary">
+                          <Text>{CLOCK.format(new Date(event.startsAt))}</Text>
+                        </Badge>
+                      </Pressable>
+                    );
+                  })}
+                </CardList>
+              </Card>
+            </View>
+          ))
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+```
+
+### 13.5 Talk: calendar suggestions
+
+Add these to `SUGGESTIONS` in `talk.tsx`, so people discover the assistant:
+`"What's on the calendar this week?"`, `"Add piano for Ana on Saturday at 4"`, `"Move the parents meeting to 6 PM"`.
+
+### 13.6 Check it
+
+1. Talk (as Mom): "Add parents meeting today at <in 20 minutes>" → "yes" → it shows in Calendar.
+2. Wait until 15 minutes before it: the phone pops "📅 Coming up: Reminder: parents meeting in 15 minutes." and the hub says it.
+3. As Ana, long-press that event → Delete → alert "Mom added that event, so only a parent can change it."
+4. As Mom: "Cancel the parents meeting" → "yes" → gone from Calendar.
 
 ---
 
