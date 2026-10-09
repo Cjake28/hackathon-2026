@@ -22,6 +22,11 @@
 > 6. `CLAUDE.md`: frontend is `web`. Online extras now include Google sign-in. The AI stays local and the core still
 >    works with the internet off.
 
+> **Brain is merged into `main`** (Jarvis, all family AI tools, briefing, memory, chore photo check, location + Map page).
+> After `git pull`: `npm install --prefix web` (map libraries), `npm run db:push` (Location + Place tables),
+> `npm run db:seed` (new permissions + places). `/voice/*`, `/briefing` and `/chores` now call the real AI: run Ollama
+> (`npm run ai`, model `qwen3.5:4b`) or test them against the hub laptop. Everything else still answers without Ollama.
+
 ---
 
 ## 1. What's already built (don't rebuild it)
@@ -435,7 +440,7 @@ User ids after a fresh seed: Admin 1, Mom 2, Dad 3, Ana 4, Ben 5, Guest 6.
 **Done alone when:** a curl script creates an alarm with `inMinutes: 1` for Ana, and within ~70 s Ana's `/device/poll`
 returns it in `ringing` plus an `alarm:ring` notice.
 
-### Brain dev: DONE on the `brain` branch (merges at 2:30), now building location (section 9)
+### Brain dev: DONE and merged to `main` (Jarvis + location)
 
 1. **`/voice/text` first** (needs no voice and no hub key). Copy `agentReply()` from `conversations.controller.ts`
    (duplication is fine). The system prompt adds: Jarvis personality, **reply in 1–2 short sentences, no Markdown (it's
