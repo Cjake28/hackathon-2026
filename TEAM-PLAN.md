@@ -491,11 +491,12 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
 
 **Brain next (decided):**
 
-1. **Now: demo-line shortcuts.** The 6–8 sentences said on stage get an instant, fixed path (like "good morning",
-   "where is Ana" and "yes/no" already have), so they work every time, not just most of the time. Only the exact
-   simple wording ("add ___ to the grocery list", "wake ___ up in ___ minutes"); anything else ("don't…",
-   "actually…") goes to the AI as before. Changes still ask "Say yes to confirm" and the same permission checks run.
-   Proof: each demo line 10 times **before and after**. Anything worse → undo.
+1. **Now: names the way speech-to-text writes them.** Tested first: every demo line already works **10/10**
+   (0.8–1.9 s) after the GPU fix, so demo-line shortcuts were dropped (no gain). The real risk found: Whisper writes
+   "Anna", and Jarvis answered "I don't know anyone called Anna" (3/3), same for "mama". Fix in Brain's `person()`:
+   nicknames (mama/mommy/nanay → Mom, papa/daddy/tatay → Dad), possessives ("Ana's"), and doubled letters ("Anna" →
+   Ana, "Benn" → Ben). Also: fixed guest reply text and "Welcome home, Ana" without "!", so they match the Voice dev's
+   pre-recorded clips (instant voice). Proof: the 10× demo test again, plus the misspelled names.
 2. **Then: help the team.** The demo can't run without alarms ringing (Hub), Ana's phone screen (UI) and the mic (Voice).
    Brain owns the hub laptop and runs the 2:30 merge.
 3. **Only if there's time at the end:** intercom ("tell everyone dinner's ready", #18), reward points for approved
