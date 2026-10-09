@@ -143,6 +143,7 @@ export type Task = {
 
 export type NoticeKind =
   | 'alarm:ring'
+  | 'alarm:ignored' // a kid's alarm rang 2 min with no dismiss; sent to the parents. data: { alarmId, userId }
   | 'task:new'
   | 'task:reviewed'
   | 'presence:arrived'
