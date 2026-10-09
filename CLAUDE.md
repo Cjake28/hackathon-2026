@@ -5,8 +5,8 @@
 - Everything runs on one computer (the "hub") and devices on the same Wi-Fi/LAN use it. No cloud services.
 - Never add a cloud API, SDK, CDN script, remote font, analytics, or anything that needs the internet at runtime.
 - AI is local (Ollama). Auth is email + password only (no email codes, no Google).
-- Exception, online extras (TEAM-PLAN.md section 9): ElevenLabs text-to-speech in `voice/`, OpenStreetMap map tiles and a
-  Cloudflare tunnel for location. The core must still work with the internet off: always fall back to local.
+- Exception, online extras (TEAM-PLAN.md section 9): ElevenLabs text-to-speech in `voice/`, Google Maps (JS, Geocoding, Routes)
+  with Leaflet + OpenStreetMap as the no-key fallback, and a Cloudflare tunnel for location. The core must still work with the internet off: always fall back to local.
 
 ## This project's frontend: web + mobile  ← set at kickoff: web / mobile / both
 - Only build screens in the frontend(s) named above. The web app also works in phone browsers.

@@ -536,6 +536,11 @@ Demo line: pull the internet and Jarvis keeps talking with the local voice.
   `https://….trycloudflare.com` address. That also works when the phone is away from home.
 - The hub stores each person's last location and checks it against **places** (home, school, Lola's, with a radius).
   Arriving at a place → `presence:arrived` notice + the hub says "Ana arrived at School".
-- Jarvis: "Where is Ana?" → `where_is` tool (parents only: `location.read`).
-- Map: Leaflet + OpenStreetMap tiles (free, no key). Locations stay on the hub; OpenStreetMap only serves map pictures.
+- Jarvis: "Where is Ana?" → `where_is` tool (parents only: `location.read`). With Google: "Ana is near SM Megamall, about
+  15 minutes from Home by car" (Geocoding + Routes APIs, called by the hub only when someone asks; #57 arrival estimate).
+- Map page: **Google Maps** when a key is set, **Leaflet + OpenStreetMap** (free, no key) when it isn't. Same features on both.
+- Keys (Brain dev's GCP credits): enable **Maps JavaScript API, Geocoding API, Routes API**.
+  `VITE_GOOGLE_MAPS_KEY` in `web/.env` (browser key, restrict to `localhost` and `*.trycloudflare.com`),
+  `GOOGLE_MAPS_KEY` in `api/.env` (server key for geocoding and travel time). No key → everything still works, just plainer.
+- Locations are stored on the hub. Google only gets coordinates when someone asks "Where is Ana?" or opens the map.
 - Demo: everyone is in the same room, so make a place called "School" around the venue with "Add place here".
