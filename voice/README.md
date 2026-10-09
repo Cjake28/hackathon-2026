@@ -23,7 +23,7 @@ python voiceid.py              # record once, print every profile's score (tune 
 python pregen.py               # online: clips/phrases.txt -> clips/*.wav (exact lines play without internet)
 ```
 
-What's used for each job: speech-to-text is ElevenLabs Scribe, falling back to local faster-whisper when offline. Speech is a saved clip first, then ElevenLabs (George), then local Kokoro, then pyttsx3. Wake word (openwakeword) and voice ID (SpeechBrain ECAPA) are always local.
+What's used for each job: speech-to-text is local faster-whisper (ElevenLabs Scribe only if `ELEVENLABS_STT=true`). Speech is a saved clip first, then ElevenLabs (George), then local Kokoro, then pyttsx3. Wake word (openwakeword) and voice ID (SpeechBrain ECAPA) are always local.
 The console shows which one ran (`[stt: scribe]`, `[tts: clip]`, ...). With no internet everything still works, just with the local options.
 
 ## Contract (don't change without telling the team)

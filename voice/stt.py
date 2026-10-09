@@ -1,4 +1,4 @@
-# OWNER: voice-ears. Speech-to-text: ElevenLabs Scribe first, local faster-whisper (multilingual small) as fallback.
+# OWNER: voice-ears. Speech-to-text: local faster-whisper (multilingual small); ElevenLabs Scribe first only if ELEVENLABS_STT=true.
 import io
 
 import numpy as np
@@ -38,7 +38,7 @@ def transcribe(audio: np.ndarray) -> str:
     """Text of the 16 kHz float32 audio. Logs which engine answered."""
     if len(audio) < config.SAMPLE_RATE // 4:
         return ''
-    if config.ELEVENLABS_API_KEY:
+    if config.ELEVENLABS_STT and config.ELEVENLABS_API_KEY:
         try:
             text = _scribe(audio)
             print('  [stt: scribe]')

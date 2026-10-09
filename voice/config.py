@@ -13,6 +13,7 @@ PORT = int(os.getenv('PORT', '4103'))
 ID_THRESHOLD = float(os.getenv('ID_THRESHOLD', '0.6'))
 ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY', '')
 ELEVENLABS_VOICE_ID = os.getenv('ELEVENLABS_VOICE_ID', '')
+ELEVENLABS_STT = os.getenv('ELEVENLABS_STT', 'false').lower() == 'true'  # off = recordings never leave the hub (TEAM-PLAN 9)
 ELEVENLABS_TIMEOUT = 6  # seconds; Scribe needs ~1.7 s for 2 s of audio. On timeout/error fall back to local
 
 SAMPLE_RATE = 16000
