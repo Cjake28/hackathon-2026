@@ -1,0 +1,2 @@
+# The Google service account key (docs/google-calendar.md). Never commit it.
+google-key.json

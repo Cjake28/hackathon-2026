@@ -10,6 +10,7 @@ import { AuthGuard } from './auth/auth.guard';
 import { BriefingController } from './briefing/briefing.controller';
 import { ExpensesController } from './budget/expenses.controller';
 import { EventsController } from './calendar/events.controller';
+import { GoogleController } from './calendar/google.controller';
 import { ChoresController } from './chores/chores.controller';
 import { ConversationsController } from './conversations/conversations.controller';
 import { DeviceController } from './device/device.controller';
@@ -50,6 +51,7 @@ import { VoiceController } from './voice/voice.controller';
     AlarmsController,
     DeviceController,
     EventsController,
+    GoogleController,
     ExpensesController,
     TasksController,
     // Brain dev:

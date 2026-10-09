@@ -18,6 +18,7 @@ model User {
   conversations Conversation[]
   lastSeenAt    DateTime? // presence: updated by GET /api/device/poll
   lastIp        String?
+  googleCalendarId String? // their Google Calendar (usually their Gmail), shared with the hub's service account
   alarms        Alarm[]
   tasks         Task[]
   memories      MemoryNote[]
@@ -153,6 +154,11 @@ model Event {
   userId      Int? // null = whole family
   createdById Int
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+  // Copy in Google Calendar (api/src/calendar/google-calendar.ts): synced when googleSyncedAt < updatedAt
+  googleEventId    String?
+  googleCalendarId String?
+  googleSyncedAt   DateTime?
 }
 
 // #58 budget (monthly limit lives in Setting key "budget.monthly")

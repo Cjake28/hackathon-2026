@@ -20,6 +20,7 @@ import { checkTool, runTool, toolSpecs, toolsFor } from '../ai/tools';
 import { Can, CurrentUser, Public } from '../auth/auth.decorators';
 import { toAuthUser, type AuthUser } from '../auth/auth.guard';
 import { BRIEFING_SYSTEM, briefingFacts, say } from '../briefing/briefing-facts';
+import { removeFromGoogle } from '../calendar/google-calendar';
 import { notify } from '../family';
 import { PrismaService } from '../prisma.service';
 import { RagService } from '../rag/rag.service';
@@ -53,7 +54,10 @@ const UNDOERS: Record<string, (prisma: PrismaService, ids: number[]) => Promise<
   set_alarm: (p, ids) => p.alarm.deleteMany({ where: { id: { in: ids } } }),
   give_task: (p, ids) => p.task.deleteMany({ where: { id: { in: ids } } }),
   create_items: (p, ids) => p.item.deleteMany({ where: { id: { in: ids } } }),
-  add_event: (p, ids) => p.event.deleteMany({ where: { id: { in: ids } } }),
+  add_event: async (p, ids) => {
+    for (const event of await p.event.findMany({ where: { id: { in: ids } } })) removeFromGoogle(event).catch(() => {});
+    return p.event.deleteMany({ where: { id: { in: ids } } });
+  },
   add_expense: (p, ids) => p.expense.deleteMany({ where: { id: { in: ids } } }),
   remember: (p, ids) => p.memoryNote.deleteMany({ where: { id: { in: ids } } }),
 };
