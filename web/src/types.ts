@@ -19,6 +19,8 @@ export const PERMISSIONS = [
   'budget.use',
   'presence.read',
   'memory.own',
+  'location.share',
+  'location.read',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -161,3 +163,18 @@ export type FamilyEvent = { id: number; title: string; startsAt: string; userId:
 export type Expense = { id: number; amount: number; category: string; note: string; addedById: number; spentAt: string };
 
 export type BudgetSummary = { month: string; total: number; limit: number | null; byCategory: Record<string, number> };
+
+// #51 #52 location (Brain dev, TEAM-PLAN.md section 9)
+export type Place = { id: number; name: string; lat: number; lng: number; radiusM: number };
+
+export type FamilyLocation = {
+  userId: number;
+  name: string;
+  lat: number;
+  lng: number;
+  accuracy: number | null;
+  placeId: number | null;
+  place: string | null; // the saved place they're at, or null
+  since: string;
+  updatedAt: string;
+};

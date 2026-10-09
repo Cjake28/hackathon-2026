@@ -15,6 +15,7 @@ import { ConversationsController } from './conversations/conversations.controlle
 import { DeviceController } from './device/device.controller';
 import { HubController } from './hub.controller';
 import { ItemsController } from './items/items.controller';
+import { LocationController } from './location/location.controller';
 import { MemoryController } from './memory/memory.controller';
 import { PrismaService } from './prisma.service';
 import { RagController } from './rag/rag.controller';
@@ -52,6 +53,7 @@ import { VoiceController } from './voice/voice.controller';
     // Brain dev:
     BriefingController,
     ChoresController,
+    LocationController,
     MemoryController,
     VoiceController,
   ],

@@ -4,6 +4,8 @@ import type { AuthUser } from '../auth/auth.guard';
 import { hasPermission, type Permission } from '../auth/permissions';
 import { briefingFacts, say, sayTime } from '../briefing/briefing-facts';
 import { assertCanActFor, findPerson, nextAt, notify, speak } from '../family';
+import { distanceM, sayDistance } from '../location/geo';
+import { driveMinutes, placeName } from '../location/google';
 import type { PrismaService } from '../prisma.service';
 import type { RagService } from '../rag/rag.service';
 import type { AiTool } from './ai.service';
@@ -256,6 +258,29 @@ export const TOOLS = [
       const since = new Date(Date.now() - 2 * 60_000); // same rule as GET /api/device/poll
       const people = await prisma.user.findMany({ where: { role: { name: { in: ['parent', 'child'] } } }, orderBy: { id: 'asc' } });
       return people.map((p) => `${p.name}: ${p.lastSeenAt && p.lastSeenAt >= since ? 'home' : 'away'}`).join(', ');
+    },
+  }),
+  tool({
+    name: 'where_is',
+    description: 'Where a family member is right now (from their phone).',
+    params: z.object({ person: z.string() }),
+    permission: 'location.read',
+    confirm: false,
+    run: async ({ person: name }, { prisma, user }) => {
+      const p = await person(prisma, name, user);
+      const [loc, places] = await Promise.all([prisma.location.findUnique({ where: { userId: p.id } }), prisma.place.findMany()]);
+      if (!loc) return `${p.name} hasn't shared a location yet.`;
+      const ago = Math.round((Date.now() - loc.updatedAt.getTime()) / 60_000);
+      const updated = ago < 1 ? 'just now' : `${ago} minutes ago`;
+      const place = places.find((pl) => pl.id === loc.placeId);
+      if (place) return `${p.name} is at ${place.name} since ${sayTime(loc.since)} (updated ${updated}).`;
+      // Not at a saved place: with GOOGLE_MAPS_KEY, a real place name + driving time home (#57).
+      const home = places.find((pl) => /^home$/i.test(pl.name));
+      const [near, minutes] = await Promise.all([placeName(loc), home ? driveMinutes(loc, home) : null]);
+      const nearest = places.map((pl) => ({ pl, d: distanceM(loc, pl) })).sort((a, b) => a.d - b.d)[0];
+      const where = near ? `near ${near}` : nearest ? `about ${sayDistance(nearest.d)} from ${nearest.pl.name}` : 'away';
+      const eta = minutes ? `, about ${minutes} minutes from Home by car` : '';
+      return `${p.name} is ${where}${eta} (updated ${updated}).`;
     },
   }),
   tool({

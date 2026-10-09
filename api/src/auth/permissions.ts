@@ -18,6 +18,8 @@ export const PERMISSIONS = [
   'budget.use',
   'presence.read', // who's home (never for guests)
   'memory.own', // Jarvis remembers things about you
+  'location.share', // the phone sends its GPS (#51)
+  'location.read', // see where everyone is, manage places (parents)
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

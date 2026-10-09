@@ -31,6 +31,8 @@ const CONFIRM_SECONDS = 60; // a proposed action waits this long for "yes"
 const RECENT_MINUTES = 5; // earlier voice messages the AI sees, for follow-ups
 // "Good morning, Jarvis" always gives the briefing (#30): too important for the demo to leave to the model.
 const BRIEFING = /^(good morning|morning|magandang umaga)\b|what('s| is) (my|the) (day|schedule)|ano.*(gagawin|schedule) ko/i;
+// "Where is Ana?" / "Nasaan na si Ana?" always reads the real location (#51): the small model repeats old answers.
+const WHERE = /^(?:hey jarvis,?\s*)?(?:where is|where's|nasaan(?: na)?(?: si)?)\s+([\p{L}' ]+?)\s*(?:now|ngayon)?\??$/iu;
 
 // Owner: Brain dev. Jarvis: the voice service (or the web's typed box) sends what someone said, the AI answers with
 // the family tools (api/src/ai/tools.ts) and the reply is spoken. Permissions come from the speaker's role, never
@@ -142,18 +144,28 @@ export class VoiceController {
     const tools = guest ? [] : toolsFor(user).filter((t) => t.name !== 'search_documents');
     const deps = { prisma: this.prisma, rag: this.rag, user };
 
+    // Earlier messages only when Jarvis just asked something ("Which alarm?"): otherwise the small model copies old
+    // answers ("Ana is at school") instead of calling the tool again.
     const recent = await this.prisma.conversationMessage.findMany({
       where: { conversationId, createdAt: { gte: new Date(Date.now() - RECENT_MINUTES * 60_000) } },
       orderBy: { id: 'desc' },
       take: 8,
     });
+    const followUp = recent[0]?.role === 'assistant' && recent[0].content.trim().endsWith('?') && !recent[0].action;
     const history: ChatMessage[] = [
-      ...recent.reverse().map((m) => ({ role: m.role as ChatMessage['role'], content: m.content })),
+      ...(followUp ? recent.reverse().map((m) => ({ role: m.role as ChatMessage['role'], content: m.content })) : []),
       { role: 'user', content: text },
     ];
     const messages: AiMessage[] = [{ role: 'system', content: await this.system(user) }, ...history];
 
     try {
+      const where = guest ? null : text.match(WHERE);
+      if (where) {
+        const tool = tools.find((t) => t.name === 'where_is');
+        if (!tool) return { text: `Sorry ${user.name}. Only parents can check where people are.` };
+        return { text: String(await runTool(tool, { person: where[1].trim() }, deps)) };
+      }
+
       for (let step = 0; step < 5; step++) {
         const reply = await this.ai.toolStep(messages, toolSpecs(tools));
         const calls = reply.tool_calls ?? [];
@@ -215,6 +227,9 @@ export class VoiceController {
       memory.length ? `What you remember about ${user.name}: ${memory.map((m) => m.text).join('; ')}.` : '',
       style,
       `Use a tool only when ${user.name} asks for something a tool does. "Me", "my" and "I" mean ${user.name}.`,
+      'For anything that changes (where people are, who is home, alarms, tasks, lists), call the tool again every time: ' +
+        'earlier answers may be out of date. Never guess or invent facts about the family: say only what tools return, ' +
+        "and if you have no tool for it, say you can't check that.",
     ]
       .filter(Boolean)
       .join('\n');

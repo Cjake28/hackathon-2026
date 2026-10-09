@@ -19,6 +19,8 @@ export const PERMISSIONS = [
   'budget.use',
   'presence.read',
   'memory.own',
+  'location.share',
+  'location.read',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
