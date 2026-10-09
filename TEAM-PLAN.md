@@ -62,6 +62,10 @@ Judges see 3–5 minutes. Build in this order and cut from the bottom.
 | **Voice dev** (Python) | Mic, wake word, speech-to-text, voice ID, text-to-speech, the hub laptop's audio setup | #2 #3 #7(detect unknown voice) | Console prints `[Mom 0.91] set an alarm...` |
 | **UI dev** | Every screen in `web/` | Device page (#34), dashboard, all pages | Real stub endpoints from H2 |
 
+**Hub laptop = the Brain dev's laptop** (RTX 3050 4 GB, 16 GB RAM, i5-12450H). It runs `qwen3.5:4b`, which has vision ✓ and tools ✓.
+The Brain dev builds on it. The Voice dev develops on their own laptop with `--mock` and moves the mic setup to the hub
+laptop at H8. Demo day runs entirely on this laptop.
+
 ### File ownership. Never edit a file you don't own; ask the owner in the group chat.
 
 | Path | Owner |
