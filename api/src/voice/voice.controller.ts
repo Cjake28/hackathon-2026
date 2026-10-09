@@ -29,6 +29,15 @@ type PendingAction = { tool: string; args: unknown; description: string; status:
 type Answer = { text: string; action?: PendingAction };
 
 const GUEST_EMAIL = 'guest@family.local'; // every unknown voice speaks as this user (seed.ts)
+const BRAIN_OFFLINE = 'Sorry, my brain is restarting. Alarms and reminders still work.';
+// Normal turns take 1–3 s. When Ollama restarts (its tray app does that by itself) the model reloads and a turn can
+// wait ~45 s: tested on the hub laptop. Past this limit Jarvis answers instead of staying silent.
+const AI_TIMEOUT_MS = 15_000;
+const BRAIN_SLOW = "Sorry, I'm still waking up. Ask me again in a few seconds.";
+// AI turns that passed AI_TIMEOUT_MS and are still running. The AI answers one at a time, so while one is stuck (the
+// model reloading), new questions get BRAIN_SLOW right away instead of queueing more work behind it (tested: they piled
+// up and recovery took over a minute).
+let stuckTurns = 0;
 const YES = /^(yes|yeah|yep|yup|oo|opo|oho|sige|go|okay|ok|confirm|sure|do it|tama)\b/i;
 const NO = /^(no|nope|hindi|huwag|wag|cancel|stop|never mind|ayaw)\b/i;
 const CONFIRM_SECONDS = 60; // a proposed action waits this long for "yes"
@@ -63,6 +72,8 @@ export class VoiceController {
     const where = body.speakerId ? { id: body.speakerId } : { email: GUEST_EMAIL };
     const user = await this.prisma.user.findUnique({ where, include: { role: true } });
     if (!user) throw new NotFoundException(body.speakerId ? `No user with id ${body.speakerId}` : 'Run npm run db:seed (no Guest user)');
+    // A voice recognized at the hub's mic means that person is home: "who's home" works without their phone.
+    if (body.speakerId) await this.prisma.user.update({ where: { id: user.id }, data: { lastSeenAt: new Date() } });
     return this.handle(toAuthUser(user), body.text, body.confidence ?? 1);
   }
 
@@ -102,7 +113,21 @@ export class VoiceController {
       (await this.prisma.conversation.findFirst({ where: { userId: user.id, title: 'Voice' } })) ??
       (await this.prisma.conversation.create({ data: { userId: user.id, title: 'Voice', useTools: true } }));
 
-    const answer = (await this.confirmByVoice(user, conversation.id, text)) ?? (await this.think(user, conversation.id, text));
+    const answer =
+      (await this.confirmByVoice(user, conversation.id, text)) ??
+      (stuckTurns > 0 ? { text: BRAIN_SLOW } : null) ??
+      (await withTimeout(
+        this.think(user, conversation.id, text).catch((error) => {
+          // The AI failed (Ollama down, out of memory): say so instead of going silent on stage.
+          if (error instanceof HttpException && error.getStatus() >= 500) {
+            console.error('[voice] AI failed:', error.message);
+            return { text: BRAIN_OFFLINE } as Answer;
+          }
+          throw error;
+        }),
+        AI_TIMEOUT_MS,
+        { text: BRAIN_SLOW },
+      ));
 
     await this.prisma.conversationMessage.create({ data: { conversationId: conversation.id, role: 'user', content: text } });
     await this.prisma.conversationMessage.create({
@@ -271,6 +296,28 @@ export class VoiceController {
   private sorry(user: AuthUser, error: unknown) {
     if (!(error instanceof HttpException)) throw error;
     return error.getStatus() === 400 ? error.message : `Sorry ${user.name}. ${error.message}`;
+  }
+}
+
+// The answer, or `fallback` if it takes longer than `ms`. The slow work keeps running (it warms the model up) and counts
+// in stuckTurns until it ends.
+async function withTimeout<T>(work: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<T>(
+    (resolve) =>
+      (timer = setTimeout(() => {
+        stuckTurns++;
+        let counted = true;
+        const release = () => counted && ((counted = false), stuckTurns--);
+        void work.catch(() => {}).finally(release);
+        setTimeout(release, 90_000); // a hung AI call must not keep Jarvis "waking up" forever
+        resolve(fallback);
+      }, ms)),
+  );
+  try {
+    return await Promise.race([work, late]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
