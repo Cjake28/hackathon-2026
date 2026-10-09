@@ -1,9 +1,11 @@
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
 import type { AuthUser } from '../auth/auth.guard';
 import { hasPermission, type Permission } from '../auth/permissions';
+import { briefingFacts, say, sayTime } from '../briefing/briefing-facts';
+import { assertCanActFor, findPerson, nextAt, notify, speak } from '../family';
 import type { PrismaService } from '../prisma.service';
 import type { RagService } from '../rag/rag.service';
-import { FAKE_ALARMS, FAKE_BRIEFING, FAKE_BUDGET, FAKE_EVENTS, FAKE_PEOPLE, FAKE_TASKS } from '../fake';
 import type { AiTool } from './ai.service';
 
 type Deps = { prisma: PrismaService; rag: RagService; user: AuthUser };
@@ -18,6 +20,9 @@ type AppTool<T extends z.ZodObject> = {
   permission: Permission;
   confirm: boolean;
   describe?: (args: z.infer<T>) => string; // what the Confirm card says
+  // Runs before a confirm: true tool is proposed. Throw (e.g. ForbiddenException) to refuse right away instead of
+  // after the user says yes. run() must still re-check: permissions can change before the Confirm.
+  check?: (args: z.infer<T>, deps: Deps) => Promise<unknown>;
   run: (args: z.infer<T>, deps: Deps) => Promise<unknown>;
 };
 
@@ -61,59 +66,110 @@ export const TOOLS = [
     run: ({ id, done }, { prisma }) => prisma.item.update({ where: { id }, data: { done } }),
   }),
 
-  // ---- Family hub (TEAM-PLAN.md 4.6). Owner: Brain dev. STUB run()s return fake data. ----
-  // Real versions: resolve names with findPerson(), check assertCanActFor() (api/src/family.ts), then prisma.
+  // ---- Family hub (TEAM-PLAN.md 4.6). Owner: Brain dev. ----
   tool({
     name: 'set_alarm',
-    description:
-      'Set an alarm or reminder for someone. Use inMinutes for "in 10 minutes", time (HH:mm, 24-hour) for a clock time.',
+    description: 'Set an alarm or reminder for someone. Use inMinutes for "in 10 minutes", time for a clock time.',
     params: z.object({
-      person: z.string().optional().describe('Name, or leave empty for the speaker'),
-      time: z.string().optional().describe('"06:30" or "18:00"'),
+      person: z.string().optional().describe('Who it rings for. Leave empty for the speaker'),
+      time: z.string().optional().describe('Clock time, e.g. "06:30" or "6:30 pm"'),
       inMinutes: z.number().int().min(1).max(1440).optional(),
-      label: z.string().optional().describe('"Wake up", "Take medicine", "Leave for school"'),
+      label: z.string().optional().describe('e.g. "Wake up", "Take medicine", "Leave for school"'),
       repeat: z.enum(['once', 'daily', 'weekdays']).optional(),
       kind: z.enum(['alarm', 'reminder']).optional(),
     }),
     permission: 'alarms.own',
     confirm: true,
     describe: (a) =>
-      `Set a ${a.kind ?? 'alarm'} "${a.label ?? 'Alarm'}" for ${a.person ?? 'you'} ${a.inMinutes ? `in ${a.inMinutes} min` : `at ${a.time}`}`,
-    run: async () => FAKE_ALARMS[0],
+      `${a.kind === 'reminder' ? 'Set a reminder' : 'Set an alarm'} "${a.label ?? (a.kind === 'reminder' ? 'Reminder' : 'Alarm')}" ` +
+      `for ${a.person ?? 'you'} ${when(a)}`,
+    check: async (a, { prisma, user }) => {
+      const p = await person(prisma, a.person, user);
+      assertCanActFor(user, p.id, 'alarms.family');
+      if (!a.inMinutes && !parseTime(a.time)) throw new BadRequestException('What time? Say a time like 6:30 AM, or "in 10 minutes".');
+    },
+    run: async (a, { prisma, user }) => {
+      const p = await person(prisma, a.person, user);
+      assertCanActFor(user, p.id, 'alarms.family');
+      const kind = a.kind ?? 'alarm';
+      const label = a.label ?? (kind === 'reminder' ? 'Reminder' : 'Alarm');
+      const data = { userId: p.id, createdById: user.id, kind, label };
+      if (a.inMinutes) {
+        const at = new Date(Date.now() + a.inMinutes * 60_000);
+        return prisma.alarm.create({ data: { ...data, time: hhmm(at), repeat: 'once', nextAt: at } });
+      }
+      const time = parseTime(a.time);
+      if (!time) throw new BadRequestException('What time? Say a time like 6:30 AM, or "in 10 minutes".');
+      const repeat = a.repeat ?? 'once';
+      return prisma.alarm.create({ data: { ...data, time, repeat, nextAt: nextAt(time, repeat) } });
+    },
   }),
   tool({
     name: 'list_alarms',
-    description: "List someone's alarms and reminders with their id.",
-    params: z.object({ person: z.string().optional() }),
+    description: "List someone's alarms and reminders with their id and who set them.",
+    params: z.object({ person: z.string().optional().describe('Leave empty for the speaker') }),
     permission: 'alarms.own',
     confirm: false,
-    run: async () => FAKE_ALARMS,
+    run: async ({ person: name }, { prisma, user }) => {
+      const p = await person(prisma, name, user);
+      assertCanActFor(user, p.id, 'alarms.family');
+      const [alarms, names] = await Promise.all([
+        prisma.alarm.findMany({ where: { userId: p.id }, orderBy: { nextAt: 'asc' } }),
+        nameById(prisma),
+      ]);
+      if (!alarms.length) return `${p.name} has no alarms or reminders.`;
+      return alarms.map((a) => ({
+        id: a.id, kind: a.kind, label: a.label, time: pretty(a.time), repeat: a.repeat, on: a.enabled,
+        setBy: names[a.createdById],
+      }));
+    },
   }),
   tool({
     name: 'cancel_alarm',
-    description: 'Delete an alarm or reminder by its id (use list_alarms to find the id).',
+    description: 'Delete an alarm or reminder by its id (use list_alarms first to find the id).',
     params: z.object({ id: z.number().int() }),
     permission: 'alarms.own',
     confirm: true,
     describe: ({ id }) => `Delete alarm #${id}`,
-    run: async ({ id }) => ({ ...FAKE_ALARMS[0], id }),
+    check: ({ id }, { prisma, user }) => alarmICanChange(prisma, user, id),
+    run: async ({ id }, { prisma, user }) => {
+      await alarmICanChange(prisma, user, id);
+      return prisma.alarm.delete({ where: { id } });
+    },
   }),
   tool({
     name: 'give_task',
-    description: 'Give a task or chore to a family member. Chores are checked with before and after photos.',
-    params: z.object({ person: z.string(), title: z.string(), isChore: z.boolean().optional() }),
+    description: 'Give a task or a house chore to a family member. Chores are checked with before and after photos.',
+    params: z.object({
+      person: z.string(),
+      title: z.string().describe('Short, e.g. "Wash the dishes"'),
+      isChore: z.boolean().optional().describe('true for house chores'),
+    }),
     permission: 'tasks.assign',
     confirm: true,
     describe: ({ person, title, isChore }) => `Give ${person} a ${isChore ? 'chore' : 'task'}: ${title}`,
-    run: async ({ title }) => ({ ...FAKE_TASKS[0], title }),
+    check: ({ person: name }, { prisma, user }) => person(prisma, name, user),
+    run: async ({ person: name, title, isChore }, { prisma, user }) => {
+      const p = await person(prisma, name, user);
+      const task = await prisma.task.create({ data: { title, assigneeId: p.id, createdById: user.id, isChore: !!isChore } });
+      await notify(prisma, p.id, 'task:new', `${user.name}: ${title}`, { taskId: task.id });
+      speak(`${p.name}, ${user.name} gave you a ${isChore ? 'chore' : 'task'}: ${title}`);
+      return task;
+    },
   }),
   tool({
     name: 'list_tasks',
     description: "List someone's tasks and chores with their status.",
-    params: z.object({ person: z.string().optional() }),
+    params: z.object({ person: z.string().optional().describe('Leave empty for the speaker') }),
     permission: 'tasks.own',
     confirm: false,
-    run: async () => FAKE_TASKS,
+    run: async ({ person: name }, { prisma, user }) => {
+      const p = await person(prisma, name, user);
+      assertCanActFor(user, p.id, 'tasks.assign');
+      const tasks = await prisma.task.findMany({ where: { assigneeId: p.id }, orderBy: { createdAt: 'desc' }, take: 20 });
+      if (!tasks.length) return `${p.name} has no tasks.`;
+      return tasks.map((t) => ({ id: t.id, title: t.title, status: t.status, chore: t.isChore, feedback: t.feedback }));
+    },
   }),
   tool({
     name: 'list_events',
@@ -121,28 +177,60 @@ export const TOOLS = [
     params: z.object({ day: z.enum(['today', 'tomorrow', 'week']).optional() }),
     permission: 'calendar.use',
     confirm: false,
-    run: async () => FAKE_EVENTS,
+    run: async ({ day = 'week' }, { prisma }) => {
+      const from = new Date();
+      from.setHours(0, 0, 0, 0);
+      if (day === 'tomorrow') from.setDate(from.getDate() + 1);
+      const to = new Date(from);
+      to.setDate(to.getDate() + (day === 'week' ? 7 : 1));
+      const [events, names] = await Promise.all([
+        prisma.event.findMany({ where: { startsAt: { gte: from, lt: to } }, orderBy: { startsAt: 'asc' } }),
+        nameById(prisma),
+      ]);
+      if (!events.length) return 'No events.';
+      return events.map((e) => ({ title: e.title, when: say(e.startsAt), who: e.userId ? names[e.userId] : 'whole family' }));
+    },
   }),
   tool({
     name: 'add_event',
     description: 'Add an event to the family calendar.',
     params: z.object({
       title: z.string(),
-      startsAt: z.string().describe('ISO date and time, e.g. 2026-10-11T16:00'),
+      startsAt: z.string().describe('Local date and time, e.g. 2026-10-11T16:00'),
       person: z.string().optional().describe('Leave empty for the whole family'),
     }),
     permission: 'calendar.use',
     confirm: true,
-    describe: ({ title, startsAt }) => `Add "${title}" to the calendar on ${startsAt}`,
-    run: async ({ title, startsAt }) => ({ ...FAKE_EVENTS[0], title, startsAt }),
+    describe: ({ title, startsAt }) => `Add "${title}" to the calendar on ${validDate(startsAt) ? say(new Date(startsAt)) : startsAt}`,
+    check: async ({ startsAt, person: name }, { prisma, user }) => {
+      if (!validDate(startsAt)) throw new BadRequestException('When is it? Say a day and a time.');
+      if (name) await person(prisma, name, user);
+    },
+    run: async ({ title, startsAt, person: name }, { prisma, user }) => {
+      if (!validDate(startsAt)) throw new BadRequestException('When is it? Say a day and a time.');
+      const p = name ? await person(prisma, name, user) : null;
+      return prisma.event.create({ data: { title, startsAt: new Date(startsAt), userId: p?.id ?? null, createdById: user.id } });
+    },
   }),
   tool({
     name: 'budget_summary',
-    description: "This month's family spending: total, limit and by category (pesos).",
+    description: "This month's family spending in pesos: total, monthly limit and by category.",
     params: z.object({}),
     permission: 'budget.use',
     confirm: false,
-    run: async () => FAKE_BUDGET,
+    run: async (_args, { prisma }) => {
+      const start = new Date();
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+      const [expenses, limit] = await Promise.all([
+        prisma.expense.findMany({ where: { spentAt: { gte: start } } }),
+        prisma.setting.findUnique({ where: { key: 'budget.monthly' } }),
+      ]);
+      const byCategory: Record<string, number> = {};
+      for (const e of expenses) byCategory[e.category] = (byCategory[e.category] ?? 0) + e.amount;
+      const total = expenses.reduce((sum, e) => sum + e.amount, 0);
+      return { month: start.toLocaleString('en-US', { month: 'long' }), totalPesos: total, limitPesos: limit ? Number(limit.value) : null, byCategory };
+    },
   }),
   tool({
     name: 'add_expense',
@@ -154,8 +242,9 @@ export const TOOLS = [
     }),
     permission: 'budget.use',
     confirm: true,
-    describe: ({ amount, category }) => `Add an expense: ₱${amount} for ${category}`,
-    run: async ({ amount, category }) => ({ id: 99, amount, category }),
+    describe: ({ amount, category, note }) => `Add an expense of ${amount} pesos for ${category}${note ? ` (${note})` : ''}`,
+    run: ({ amount, category, note }, { prisma, user }) =>
+      prisma.expense.create({ data: { amount, category, note: note ?? '', addedById: user.id } }),
   }),
   tool({
     name: 'who_is_home',
@@ -163,16 +252,20 @@ export const TOOLS = [
     params: z.object({}),
     permission: 'presence.read',
     confirm: false,
-    run: async () => FAKE_PEOPLE.filter((p) => p.isHome).map((p) => p.name),
+    run: async (_args, { prisma }) => {
+      const since = new Date(Date.now() - 2 * 60_000); // same rule as GET /api/device/poll
+      const people = await prisma.user.findMany({ where: { role: { name: { in: ['parent', 'child'] } } }, orderBy: { id: 'asc' } });
+      return people.map((p) => `${p.name}: ${p.lastSeenAt && p.lastSeenAt >= since ? 'home' : 'away'}`).join(', ');
+    },
   }),
   tool({
     name: 'remember',
     description: 'Remember a fact about the speaker (likes, allergies, routines) for later.',
-    params: z.object({ text: z.string() }),
+    params: z.object({ text: z.string().describe('Short, e.g. "likes adobo"') }),
     permission: 'memory.own',
     confirm: true,
     describe: ({ text }) => `Remember: ${text}`,
-    run: async ({ text }) => ({ id: 99, text }),
+    run: ({ text }, { prisma, user }) => prisma.memoryNote.create({ data: { userId: user.id, text } }),
   }),
   tool({
     name: 'morning_briefing',
@@ -180,7 +273,7 @@ export const TOOLS = [
     params: z.object({}),
     permission: 'ai.use',
     confirm: false,
-    run: async () => FAKE_BRIEFING,
+    run: (_args, { prisma, user }) => briefingFacts(prisma, user),
   }),
 ];
 
@@ -199,4 +292,74 @@ export const toolSpecs = (tools: AnyTool[]): AiTool[] =>
 export async function runTool(t: AnyTool, args: unknown, deps: Deps) {
   const parsed = (t.params as z.ZodType).parse(args);
   return (t.run as (args: unknown, deps: Deps) => Promise<unknown>)(parsed, deps);
+}
+
+// Runs a tool's check (if any) before it is proposed. Throws when the user may not do it.
+export async function checkTool(t: AnyTool, args: unknown, deps: Deps) {
+  const check = t.check as ((args: unknown, deps: Deps) => Promise<unknown>) | undefined;
+  if (check) await check((t.params as z.ZodType).parse(args), deps);
+}
+
+// ---- helpers for the family tools ----
+
+// findPerson(), but also finds "Ana" in "my daughter Ana" or "Ana's" (small models add words).
+async function person(prisma: PrismaService, name: string | undefined, me: AuthUser) {
+  if (!name || /^(i|my|mine|me|myself|ako|akin)$/i.test(name.trim())) return findPerson(prisma, undefined, me);
+  try {
+    return await findPerson(prisma, name, me);
+  } catch (error) {
+    const users = await prisma.user.findMany({ where: { role: { name: { not: 'guest' } } } });
+    const found = users.find((u) => new RegExp(`\\b${u.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(name));
+    if (found) return found;
+    throw error;
+  }
+}
+
+// A child can't delete an alarm a parent set (the demo's "Sorry Ana, Mom set that one").
+async function alarmICanChange(prisma: PrismaService, user: AuthUser, id: number) {
+  const alarm = await prisma.alarm.findUnique({ where: { id } });
+  if (!alarm) throw new NotFoundException(`There is no alarm number ${id}.`);
+  const parent = hasPermission(user.permissions, 'alarms.family');
+  if (alarm.userId !== user.id && !parent) throw new ForbiddenException("That's not your alarm.");
+  if (alarm.createdById !== user.id && !parent) {
+    const creator = await prisma.user.findUnique({ where: { id: alarm.createdById } });
+    throw new ForbiddenException(`${creator?.name ?? 'A parent'} set that alarm, so only a parent can remove it.`);
+  }
+  return alarm;
+}
+
+async function nameById(prisma: PrismaService) {
+  const users = await prisma.user.findMany({ select: { id: true, name: true } });
+  return Object.fromEntries(users.map((u) => [u.id, u.name])) as Record<number, string>;
+}
+
+const pad = (n: number) => String(n).padStart(2, '0');
+const hhmm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const validDate = (s: string) => !Number.isNaN(new Date(s).getTime());
+
+// "6:30", "6:30 am", "6 pm", "18:00", "6.30 p.m." → "06:30" / "18:00" (null if it isn't a time)
+function parseTime(raw?: string) {
+  const m = raw?.trim().match(/^(\d{1,2})(?:[:.](\d{2}))?\s*(a\.?\s?m\.?|p\.?\s?m\.?)?$/i);
+  if (!m) return null;
+  let h = Number(m[1]);
+  const min = Number(m[2] ?? 0);
+  const half = m[3]?.[0].toLowerCase();
+  if (half === 'p' && h < 12) h += 12;
+  if (half === 'a' && h === 12) h = 0;
+  return h > 23 || min > 59 ? null : `${pad(h)}:${pad(min)}`;
+}
+
+// "06:30" → "6:30 AM"
+function pretty(time: string) {
+  const [h, m] = time.split(':').map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return sayTime(d);
+}
+
+function when(a: { time?: string; inMinutes?: number; repeat?: string }) {
+  if (a.inMinutes) return `in ${a.inMinutes} minute${a.inMinutes === 1 ? '' : 's'}`;
+  const time = parseTime(a.time);
+  const repeat = a.repeat === 'daily' ? ' every day' : a.repeat === 'weekdays' ? ' on weekdays' : '';
+  return `at ${time ? pretty(time) : a.time}${repeat}`;
 }
