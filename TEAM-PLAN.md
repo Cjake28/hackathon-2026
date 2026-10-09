@@ -547,7 +547,12 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
       (Brain helper; one call added in **Hub's** `alarms.controller.ts` dismiss).
    4. **Alarm escalation (#27):** a kid's alarm still ringing after 2 min → notice to the parents + the hub says
       "Ana's alarm has been ringing for 2 minutes" (in **Hub's** `scheduler.service.ts`).
-   5. **Phone screens (web, phones open the hub URL):** Ana's device page (alarm full screen + dismiss/snooze, task
+   5. **~~Phone screens (web)~~ Skipped:** the team set the frontend to **mobile** (`CLAUDE.md`) and the Hub dev wrote
+      `docs/mobile-hub.md` for the UI dev (login, `useHub.ts`, poll + full-screen alarm + popups). Brain adds no web
+      screens. Note: that guide decided chores are checked off **without a photo**, which drops core #13 and demo step 5
+      ("two cups are still in the sink"). `/chores/:id/photo` still works (~2.5 s) if the team wants it as an optional
+      "Prove it" button. Also new since the guide: `alarm:ignored` notices to parents (item 4), show them like `task:new`.
+      Was: Ana's device page (alarm full screen + dismiss/snooze, task
       popup, chore before/after photos with the real AI check, intercom banner, points) and a parent hub page
       (family + who's home, points, "Jarvis heard…" feed, tasks with photos, talk to Jarvis with Yes/No). Backup for
       the mobile app until it's connected.
