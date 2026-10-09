@@ -1,12 +1,30 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  ForbiddenException,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import type { Task } from '@prisma/client';
 import { Can, CurrentUser } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.guard';
-import { FAKE_TASKS } from '../fake';
+import { hasPermission } from '../auth/permissions';
+import { notify, speak } from '../family';
 import { PrismaService } from '../prisma.service';
 
 type TaskInput = { title: string; assigneeId: number; isChore?: boolean; checklist?: string[]; dueAt?: string };
 
-// Owner: Hub dev. STUB: returns fake data in the final shape (TEAM-PLAN.md 4.5). #12
+// Only the assignee's name, never the whole user row (it has the password hash).
+const ASSIGNEE = { assignee: { select: { name: true } } } as const;
+const withName = ({ assignee, ...task }: Task & { assignee: { name: string } }) => ({ ...task, assigneeName: assignee.name });
+
+// Owner: Hub dev. #12
 // Chore photos are NOT here: POST /api/chores/:taskId/photo (Brain dev, chores.controller.ts).
 @Controller('tasks')
 export class TasksController {
@@ -15,27 +33,53 @@ export class TasksController {
   // Mine; ?all=1 needs tasks.assign → Task[] (with assigneeName)
   @Can('tasks.own')
   @Get()
-  list(@CurrentUser() user: AuthUser, @Query('all') all?: string) {
-    return FAKE_TASKS;
+  async list(@CurrentUser() user: AuthUser, @Query('all') all?: string) {
+    if (all && !hasPermission(user.permissions, 'tasks.assign')) throw new ForbiddenException("Only a parent can see everyone's tasks");
+    const tasks = await this.prisma.task.findMany({
+      where: all ? {} : { assigneeId: user.id },
+      include: ASSIGNEE,
+      orderBy: { createdAt: 'desc' },
+    });
+    return tasks.map(withName);
   }
 
-  // Real version: + notify(assigneeId, 'task:new', ...) + speak("Ana, Mom gave you a task: ...")
+  // → Task + task:new notice on the assignee's devices + the hub says it
   @Can('tasks.assign')
   @Post()
-  create(@CurrentUser() user: AuthUser, @Body() body: TaskInput) {
-    return { ...FAKE_TASKS[0], ...body, checklist: body.checklist ?? [], createdById: user.id };
+  async create(@CurrentUser() user: AuthUser, @Body() body: TaskInput) {
+    if (!body.title?.trim()) throw new BadRequestException('Give the task a title');
+    const task = await this.prisma.task.create({
+      data: {
+        title: body.title.trim(),
+        assigneeId: body.assigneeId,
+        createdById: user.id,
+        isChore: !!body.isChore,
+        checklist: body.checklist ?? [],
+        dueAt: body.dueAt ? new Date(body.dueAt) : null,
+      },
+      include: ASSIGNEE,
+    });
+    await notify(this.prisma, task.assigneeId, 'task:new', `${user.name}: ${task.title}`, { taskId: task.id });
+    speak(`${task.assignee.name}, ${user.name} gave you a ${task.isChore ? 'chore' : 'task'}: ${task.title}`);
+    return withName(task);
   }
 
-  // Assignee marks a non-chore task done: { status: "done" }
+  // The assignee marks a non-chore task done: { status: "done" }. Chores are done by the AI photo check.
   @Can('tasks.own')
   @Patch(':id')
-  update(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number, @Body() body: { status: 'done' }) {
-    return { ...FAKE_TASKS[1], id, status: body.status };
+  async update(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
+    const task = await this.prisma.task.findUniqueOrThrow({ where: { id } });
+    if (task.assigneeId !== user.id && !hasPermission(user.permissions, 'tasks.assign')) {
+      throw new ForbiddenException('That task is for someone else');
+    }
+    if (task.isChore) throw new BadRequestException('Chores are checked by photo: send a before and an after photo');
+    const saved = await this.prisma.task.update({ where: { id }, data: { status: 'done', doneAt: new Date() }, include: ASSIGNEE });
+    return withName(saved);
   }
 
   @Can('tasks.assign')
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return { ...FAKE_TASKS[0], id };
+  async remove(@Param('id', ParseIntPipe) id: number) {
+    return withName(await this.prisma.task.delete({ where: { id }, include: ASSIGNEE }));
   }
 }

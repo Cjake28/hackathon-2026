@@ -133,9 +133,12 @@ async function main() {
     d.setHours(hour, 0, 0, 0);
     return d;
   };
+  // ~2 h from now, rounded up to the half hour: the briefing has "piano at 4:30" whenever you demo.
+  const soon = new Date(Date.now() + 2 * 3600_000);
+  soon.setMinutes(soon.getMinutes() <= 30 ? 30 : 60, 0, 0);
   await prisma.event.createMany({
     data: [
-      { title: 'Ana piano lesson', startsAt: at(0, 16), userId: Ana, createdById: Mom },
+      { title: 'Ana piano lesson', startsAt: soon, userId: Ana, createdById: Mom },
       { title: 'Ben swimming class', startsAt: at(1, 9), userId: Ben, createdById: Dad },
       { title: "Family dinner at Lola's", startsAt: at(2, 18), createdById: Dad },
     ],
