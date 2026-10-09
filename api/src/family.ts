@@ -12,6 +12,7 @@ const VOICE_URL = process.env.VOICE_URL || 'http://127.0.0.1:4103';
 export type NoticeKind =
   | 'alarm:ring'
   | 'alarm:ignored' // Brain: a kid's alarm rang 2 min with no dismiss (to the parents, #27)
+  | 'event:soon' // a calendar event starts in 15 min (to that person, or every device for a family event)
   | 'task:new'
   | 'task:reviewed'
   | 'presence:arrived'

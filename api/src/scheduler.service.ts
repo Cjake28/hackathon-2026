@@ -7,6 +7,7 @@ const TICK_MS = 10_000;
 const REPEAT_MS = 60_000; // while ringing, the hub says it again every minute
 const RING_MS = 10 * 60_000; // nobody dismissed it in 10 min (or it was missed while the hub was off): stop
 const ESCALATE_MS = 2 * 60_000; // Brain (#27): a kid's alarm still ringing after 2 min → tell the parents
+const EVENT_SOON_MS = 15 * 60_000; // calendar: a heads-up 15 min before each event
 
 // Dismissed, or rang too long: a one-time alarm turns off, a repeating one moves to its next time.
 export const stopRinging = (a: Alarm) =>
@@ -22,6 +23,7 @@ export class SchedulerService implements OnApplicationBootstrap, OnModuleDestroy
   private timer?: NodeJS.Timeout;
   private spokenAt = new Map<number, number>(); // alarm id → when the hub last said it
   private escalated = new Set<string>(); // "alarmId:ringingAt" already told to the parents
+  private remindedEvents = new Set<string>(); // "eventId:startsAt" already announced (a moved event gets a new one)
 
   constructor(private prisma: PrismaService) {}
 
@@ -55,6 +57,27 @@ export class SchedulerService implements OnApplicationBootstrap, OnModuleDestroy
       }
       this.spokenAt.set(alarm.id, now);
       speak(`${user.name}, ${alarm.label}!`);
+    }
+    await this.remindEvents(now);
+  }
+
+  // 15 min before a calendar event: an event:soon notice on that person's devices (every family device for a family
+  // event) + the hub says it: "Ana, piano lesson in 15 minutes." Kept in memory: a restart in those 15 min may say it twice.
+  private async remindEvents(now: number) {
+    const events = await this.prisma.event.findMany({
+      where: { startsAt: { gt: new Date(now), lte: new Date(now + EVENT_SOON_MS) } },
+    });
+    for (const event of events) {
+      const key = `${event.id}:${event.startsAt.getTime()}`;
+      if (this.remindedEvents.has(key)) continue;
+      this.remindedEvents.add(key);
+      const minutes = Math.max(1, Math.round((event.startsAt.getTime() - now) / 60_000));
+      const who = event.userId
+        ? (await this.prisma.user.findUnique({ where: { id: event.userId }, select: { name: true } }))?.name
+        : null;
+      const text = `${who ? `${who}, ` : 'Reminder: '}${event.title} in ${minutes} minute${minutes === 1 ? '' : 's'}.`;
+      await notify(this.prisma, event.userId, 'event:soon', text, { eventId: event.id });
+      speak(text);
     }
   }
 

@@ -1,6 +1,6 @@
 import type { PrismaService } from '../prisma.service';
 
-// #15 reward points: every chore the photo check approved = 10 points. Counted from done chores, so there's no
+// #15 reward points: every chore checked off as done = 10 points. Counted from done chores, so there's no
 // points table to keep in sync.
 export const POINTS_PER_CHORE = 10;
 

@@ -142,7 +142,7 @@ export const TOOLS = [
   }),
   tool({
     name: 'give_task',
-    description: 'Give a task or a house chore to a family member. Chores are checked with before and after photos.',
+    description: 'Give a task or a house chore to a family member. They check it off on their phone when done.',
     params: z.object({
       person: z.string(),
       title: z.string().describe('Short, e.g. "Wash the dishes"'),
@@ -176,7 +176,7 @@ export const TOOLS = [
   }),
   tool({
     name: 'list_events',
-    description: 'List family calendar events.',
+    description: 'List family calendar events with their id.',
     params: z.object({ day: z.enum(['today', 'tomorrow', 'week']).optional() }),
     permission: 'calendar.use',
     confirm: false,
@@ -191,7 +191,7 @@ export const TOOLS = [
         nameById(prisma),
       ]);
       if (!events.length) return 'No events.';
-      return events.map((e) => ({ title: e.title, when: say(e.startsAt), who: e.userId ? names[e.userId] : 'whole family' }));
+      return events.map((e) => ({ id: e.id, title: e.title, when: say(e.startsAt), who: e.userId ? names[e.userId] : 'whole family' }));
     },
   }),
   tool({
@@ -213,6 +213,39 @@ export const TOOLS = [
       if (!validDate(startsAt)) throw new BadRequestException('When is it? Say a day and a time.');
       const p = name ? await person(prisma, name, user) : null;
       return prisma.event.create({ data: { title, startsAt: new Date(startsAt), userId: p?.id ?? null, createdById: user.id } });
+    },
+  }),
+  tool({
+    name: 'move_event',
+    description: 'Move a calendar event to a new day and time, by its id (use list_events first to find the id).',
+    params: z.object({
+      id: z.number().int(),
+      startsAt: z.string().describe('New local date and time, e.g. 2026-10-11T16:00'),
+    }),
+    permission: 'calendar.use',
+    confirm: true,
+    describe: ({ id, startsAt }) => `Move event #${id} to ${validDate(startsAt) ? say(new Date(startsAt)) : startsAt}`,
+    check: async ({ id, startsAt }, { prisma, user }) => {
+      if (!validDate(startsAt)) throw new BadRequestException('When should it move to? Say a day and a time.');
+      await eventICanChange(prisma, user, id);
+    },
+    run: async ({ id, startsAt }, { prisma, user }) => {
+      if (!validDate(startsAt)) throw new BadRequestException('When should it move to? Say a day and a time.');
+      await eventICanChange(prisma, user, id);
+      return prisma.event.update({ where: { id }, data: { startsAt: new Date(startsAt) } });
+    },
+  }),
+  tool({
+    name: 'cancel_event',
+    description: 'Delete a calendar event by its id (use list_events first to find the id).',
+    params: z.object({ id: z.number().int() }),
+    permission: 'calendar.use',
+    confirm: true,
+    describe: ({ id }) => `Delete event #${id} from the calendar`,
+    check: ({ id }, { prisma, user }) => eventICanChange(prisma, user, id),
+    run: async ({ id }, { prisma, user }) => {
+      await eventICanChange(prisma, user, id);
+      return prisma.event.delete({ where: { id } });
     },
   }),
   tool({
@@ -391,6 +424,18 @@ export async function alarmICanChange(prisma: PrismaService, user: AuthUser, id:
     throw new ForbiddenException(`${creator?.name ?? 'A parent'} set that alarm, so only a parent can remove it.`);
   }
   return alarm;
+}
+
+// Whoever added an event may move or delete it; so may a parent (alarms.family). Hub's PATCH / DELETE /events/:id use
+// the same rule, so voice and the app give the same answer.
+export async function eventICanChange(prisma: PrismaService, user: AuthUser, id: number) {
+  const event = await prisma.event.findUnique({ where: { id } });
+  if (!event) throw new NotFoundException(`There is no event number ${id}.`);
+  if (event.createdById !== user.id && !hasPermission(user.permissions, 'alarms.family')) {
+    const creator = await prisma.user.findUnique({ where: { id: event.createdById } });
+    throw new ForbiddenException(`${creator?.name ?? 'A parent'} added that event, so only a parent can change it.`);
+  }
+  return event;
 }
 
 async function nameById(prisma: PrismaService) {
