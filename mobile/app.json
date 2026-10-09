@@ -36,7 +36,6 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-status-bar",
       "expo-secure-store",
       [
         "expo-image-picker",
@@ -44,7 +43,9 @@
           "photosPermission": "Pick a picture to ask the AI about it.",
           "cameraPermission": "Take a picture to ask the AI about it."
         }
-      ]
+      ],
+      "expo-status-bar",
+      "expo-font"
     ]
   }
 }

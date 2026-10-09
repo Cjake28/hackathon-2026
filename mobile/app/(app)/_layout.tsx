@@ -1,49 +1,21 @@
-import { Redirect, Tabs } from 'expo-router';
-import { FileTextIcon, HomeIcon, ListChecksIcon, SparklesIcon } from 'lucide-react-native';
-import { useCan, useMe } from '@/hooks/useAuth';
+import { Stack } from 'expo-router';
 
-// Every screen in app/(app)/ requires login and is a tab here.
-// Add a <Tabs.Screen> for every new screen. `href: null` hides the tab from users without the permission.
+// No login — the hub is shared by the whole household. The tab navigator
+// lives in (tabs)/_layout.tsx; this Stack adds the pushes (talk, task/[id],
+// member/[id], device/[id], network) and the fullscreen modals (roadmap,
+// personal-info, settings) on top of it, matching Nova's navigation model.
 export default function AppLayout() {
-  const { data: user, isLoading } = useMe();
-  const can = useCan();
-
-  if (isLoading) return null;
-  if (!user) return <Redirect href="/login" />;
-
   return (
-    <Tabs>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color, size }) => <HomeIcon color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="items"
-        options={{
-          title: 'Items',
-          href: can('items.read') ? undefined : null,
-          tabBarIcon: ({ color, size }) => <ListChecksIcon color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="ai"
-        options={{
-          title: 'AI Chat',
-          href: can('ai.use') ? undefined : null,
-          tabBarIcon: ({ color, size }) => <SparklesIcon color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="docs"
-        options={{
-          title: 'Docs',
-          href: can('ai.use') ? undefined : null,
-          tabBarIcon: ({ color, size }) => <FileTextIcon color={color} size={size} />,
-        }}
-      />
-    </Tabs>
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="talk" />
+      <Stack.Screen name="task/[id]" />
+      <Stack.Screen name="member/[id]" />
+      <Stack.Screen name="device/[id]" />
+      <Stack.Screen name="network" />
+      <Stack.Screen name="roadmap" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="personal-info" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="settings" options={{ presentation: 'modal' }} />
+    </Stack>
   );
 }

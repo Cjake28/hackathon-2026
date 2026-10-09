@@ -6,27 +6,19 @@ import { Platform, View } from 'react-native';
 
 const badgeVariants = cva(
   cn(
-    'border-border group shrink-0 flex-row items-center justify-center gap-1 overflow-hidden rounded-full border px-2 py-0.5',
+    // Duolingo-style pill: bold fill, no border, roomy padding.
+    'group shrink-0 flex-row items-center justify-center gap-1 overflow-hidden rounded-full px-3 py-1',
     Platform.select({
-      web: 'focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive w-fit whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] [&>svg]:pointer-events-none [&>svg]:size-3',
+      web: 'focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 w-fit whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] [&>svg]:pointer-events-none [&>svg]:size-3',
     })
   ),
   {
     variants: {
       variant: {
-        default: cn(
-          'bg-primary border-transparent',
-          Platform.select({ web: '[a&]:hover:bg-primary/90' })
-        ),
-        secondary: cn(
-          'bg-secondary border-transparent',
-          Platform.select({ web: '[a&]:hover:bg-secondary/90' })
-        ),
-        destructive: cn(
-          'bg-destructive border-transparent',
-          Platform.select({ web: '[a&]:hover:bg-destructive/90' })
-        ),
-        outline: Platform.select({ web: '[a&]:hover:bg-accent [a&]:hover:text-accent-foreground' }),
+        default: cn('bg-primary', Platform.select({ web: '[a&]:hover:bg-primary/90' })),
+        secondary: cn('bg-secondary', Platform.select({ web: '[a&]:hover:bg-secondary/90' })),
+        destructive: cn('bg-destructive', Platform.select({ web: '[a&]:hover:bg-destructive/90' })),
+        outline: cn('bg-sunken', Platform.select({ web: '[a&]:hover:bg-accent [a&]:hover:text-accent-foreground' })),
       },
     },
     defaultVariants: {
@@ -35,7 +27,7 @@ const badgeVariants = cva(
   }
 );
 
-const badgeTextVariants = cva('text-xs font-medium', {
+const badgeTextVariants = cva('text-xs font-sans-bold', {
   variants: {
     variant: {
       default: 'text-primary-foreground',
