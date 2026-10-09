@@ -561,7 +561,7 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
 5. **Loop:** wake/PTT → record → transcribe + identify → `POST /voice/command` → speak `reply`.
    Feel instant: a short beep when the person stops talking (Jarvis takes 1–3 s to answer), and save the audio of fixed
    lines ("Say yes to confirm", "Okay, cancelled", "Ana, wake up!") so they play right away.
-   **Thinking sound (decided, replaces the beep):** the moment someone stops talking, Jarvis says a short filler from a
+   **Thinking sound (done: Brain added it on the user's call, clips made; Voice dev, pull before editing `main.py`):** the moment someone stops talking, Jarvis says a short filler from a
    pre-recorded clip while the ears and the brain work, so the wait sounds like thinking, not freezing (offline Whisper
    takes ~4 s). Add to `clips/phrases.txt` and run `python pregen.py` (Jarvis's ElevenLabs voice, plays offline too):
    `Hmm.` · `Okay.` · `Sige.` · `Let me check.` In `main.py`, right after `clip = audio.record()` (non-empty), before

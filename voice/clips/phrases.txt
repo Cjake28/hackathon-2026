@@ -23,3 +23,8 @@ Ana, Mom gave you a chore: Wash the dishes
 Okay, cancelled.
 Ana, Wake up!
 Welcome home, Ana
+# Thinking sounds (main.py FILLERS): said the moment someone stops talking, while Jarvis works
+Hmm.
+Okay.
+Sige.
+Let me check.

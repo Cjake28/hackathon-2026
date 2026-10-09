@@ -1,6 +1,7 @@
 # The voice loop: python main.py [--mock] [--wake]
 # Push-to-talk: Enter = record. Type 1-5 then Enter = force the next speaker, 0 = automatic.
 import argparse
+import random
 import sys
 
 import config
@@ -14,6 +15,12 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # Tagalog text in a 
 config.MOCK = args.mock
 
 import audio, hub, server, stt, tts, voiceid, wake  # noqa: E402  (after config.MOCK is set)
+
+# Said the moment someone stops talking, while speech-to-text and the hub work, so the wait sounds like thinking, not
+# freezing (TEAM-PLAN, Voice step 5). Only pre-recorded clips (clips/phrases.txt, python pregen.py): they play
+# instantly and offline. A filler generated live would add delay instead.
+FILLERS = [f for f in ['Hmm.', 'Okay.', 'Sige.', 'Let me check.'] if tts.clip_path(f).exists()]
+awaiting_yes = False  # the last reply asked "Say yes to confirm": yes/no comes back in 0.3 s, no filler needed
 
 names = {u['id']: u['name'] for u in hub.get_people()}
 server.start()
@@ -32,6 +39,8 @@ while True:
                 continue
 
         clip = audio.record()
+        if len(clip) and FILLERS and not awaiting_yes:
+            tts.say(random.choice(FILLERS))  # only queued: plays while we transcribe and ask the hub
         text = stt.transcribe(clip)
         secs = len(clip) / config.SAMPLE_RATE
         if not text.strip():
@@ -50,6 +59,7 @@ while True:
         state.last_speaker = name or 'guest'
 
         res = hub.send_command(uid, score, text)
+        awaiting_yes = bool(res.get('pending'))
         tts.say(res['reply'])
     except (KeyboardInterrupt, EOFError):
         break
