@@ -43,7 +43,7 @@ while True:
 
         res = hub.send_command(uid, score, text)
         tts.say(res['reply'])
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
         break
     except Exception as e:  # keep the loop alive on stage
         print('  error:', e)
