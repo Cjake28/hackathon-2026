@@ -4,15 +4,18 @@
 ## Offline core, online extras
 - Everything runs on one computer (the "hub") and devices on the same Wi-Fi/LAN use it.
 - The AI is always local (Ollama). Audio, photos and memory notes never go to an online service.
-- Online services are allowed for extras (TEAM-PLAN.md section 9): Google sign-in, ElevenLabs text-to-speech in `voice/`,
+- Online services are allowed for extras (TEAM-PLAN.md section 9): ElevenLabs text-to-speech in `voice/`,
   Google Maps (JS, Geocoding, Routes) with Leaflet + OpenStreetMap as the no-key fallback, and a Cloudflare tunnel for
-  location. The core must still work with the internet off: always fall back to local (email + password login stays).
-- Google sign-in needs HTTPS and a domain name (e.g. the Cloudflare tunnel address): Google rejects return URLs on a plain
-  IP like `http://<hub-ip>:4101`. A quick tunnel's address changes every run, so update it in Google's console each time.
+  location. The core must still work with the internet off: always fall back to local.
+- Login is email (or a plain name like "ana") + password only. No Google sign-in, no sign-up: Mom and Dad make every
+  account (see Auth & permissions).
 
-## This project's frontend: web  ← set at kickoff: web / mobile / both
-- Only build screens in the frontend(s) named above. The web app also works in phone browsers.
-- `mobile/` is kept but not built for this project (TEAM-PLAN.md: phones open the hub URL). Don't add mobile screens.
+## This project's frontend: mobile  ← set at kickoff: web / mobile / both
+- Only build screens in the frontend(s) named above: new screens go in `mobile/` (the Expo app on the family's phones).
+- Phones reach the hub over the home Wi-Fi: `EXPO_PUBLIC_API_URL=http://<hub-ip>:4101/api` in `mobile/.env`.
+  How the app connects to the hub (login, `hooks/useHub.ts`, the 3 s device poll and full-screen alarm in
+  `components/HubListener.tsx`, the parent Accounts/Roles screens): `docs/mobile-hub.md`.
+- `web/` keeps the pages it already has (AI Settings, Map, Docs…) but gets no new screens.
 - Dropping one? Delete its folder (`web/` or `mobile/`) and remove it from the root `setup` and `typecheck` scripts.
 
 ## RAG (Q&A over documents): on  ← set at kickoff: on / off
@@ -27,7 +30,8 @@
 - AI: Ollama on the hub (`ollama` npm client, used only in `api/src/ai/ai.service.ts`). RAG: pgvector in the same Postgres.
 - Dev: `npm run ai` (Ollama, 11434), `npm run dev` (api + web), `npm run dev:mobile` (Expo). Docker runs Postgres (4102).
 - Compare models on the hub: `npm run ai:bench -- <model> <model>` → ai-bench.md.
-- Hub / demo: `npm run hub` builds the web app and the API serves it → one URL for every device: http://<hub-ip>:4101
+- Hub / demo: `npm run hub` builds the web app and the API serves it at http://<hub-ip>:4101 (web admin pages).
+  The family's phones run the mobile app pointed at the same hub (`EXPO_PUBLIC_API_URL`).
 - Data: `npm run backup` → backups/*.sql, `npm run restore -- <file> --yes`, `npm run demo:reset -- --yes`
   (deletes chats, documents, items; re-seeds). Never run restore or demo:reset unless I ask.
 
@@ -41,14 +45,16 @@
    - No feature modules. No service by default.
    - Add `<feature>.service.ts` only if logic is shared or longer than ~50 lines (register it in `providers`).
    - Prisma types come from `@prisma/client`.
-3. Data hooks: copy `hooks/useItems.ts` (in `web/src/` or `mobile/`) → useQuery for reads,
+3. Data hooks: copy `hooks/useItems.ts` (in `mobile/`) → useQuery for reads,
    useMutation + invalidateQueries for writes. Add the type to `types.ts`. Duplicating backend types is fine.
-4. Web page: copy `web/src/routes/_app/items.tsx` → a new file in `web/src/routes/_app/` is a new logged-in page.
-   Add a nav link (with its permission) to the `nav` array in `web/src/routes/_app.tsx`.
+   Hub data (alarms, tasks, family, Jarvis…) already has hooks in `mobile/hooks/useHub.ts` (`docs/mobile-hub.md`).
+4. Web page (only for the existing web admin pages; new screens are mobile): copy `web/src/routes/_app/items.tsx` →
+   a new file in `web/src/routes/_app/` is a new logged-in page. Add a nav link (with its permission) to `nav` in `web/src/routes/_app.tsx`.
    - Dynamic params: `_app/items.$id.tsx` + `Route.useParams()`. Fetch with hooks, no route loaders.
    - Never edit `routeTree.gen.ts`. Components: `web/src/components/ui/`, add more with `npx shadcn@latest add <name>` in web/.
-5. Mobile screen: copy `mobile/app/(app)/items.tsx` → a new file in `mobile/app/(app)/` is a new logged-in screen.
-   Add a `<Tabs.Screen>` (with its permission) in `mobile/app/(app)/_layout.tsx`. Detail screens: `app/(app)/items/[id].tsx`.
+5. Mobile screen: copy a tab in `mobile/app/(app)/(tabs)/` (e.g. `tasks.tsx`) → a new file there is a new logged-in tab;
+   add a `<Tabs.Screen>` (with its permission) in `mobile/app/(app)/(tabs)/_layout.tsx`. Pushed screens and modals:
+   `mobile/app/(app)/<name>.tsx`, detail screens `app/(app)/task/[id].tsx` (list them in `mobile/app/(app)/_layout.tsx`).
    - Components: `mobile/components/ui/`, add more with `npx @react-native-reusables/cli@latest add <name>` in mobile/.
    - All text must be inside `<Text>` from `@/components/ui/text`. Style with Tailwind classes (`className`).
 
@@ -73,8 +79,8 @@
   says whether the model can read pictures: `vision`, and use tools: `tools`).
 
 ## AI Chat (already built) — saved conversations
-- API: `api/src/conversations/conversations.controller.ts`. UI: `web/src/routes/_app/ai.tsx`, `mobile/app/(app)/ai.tsx`,
-  hooks in `hooks/useConversations.ts`. Each user has their own chats; the last 20 messages are the AI's context.
+- API: `api/src/conversations/conversations.controller.ts`. UI: `web/src/routes/_app/ai.tsx` (on mobile, people talk to
+  Jarvis on `talk.tsx` via `POST /voice/text`), hooks in `hooks/useConversations.ts`. Each user has their own chats; the last 20 messages are the AI's context.
 - Per chat: "Use my documents" (`useDocs`: RAG sources go into the prompt, answers cite [1]) and
   "Allow app actions" (`useTools`: the AI can use tools). Pictures: web `imageToBase64()`, mobile `pickImage()`;
   only shown when `status.vision`. Read aloud: `useSpeech()` (device voices, offline).
@@ -102,7 +108,8 @@
 
 ## Expo plugin (skills + MCP) — development tools only, not part of the product
 - Use the expo-* skills for correct Expo SDK 57 APIs and config, but keep this boilerplate's choices:
-  React Native Reusables + lucide icons + `className` styling, JS `<Tabs>`, TanStack Query hooks in `mobile/hooks/`.
+  React Native Reusables + phosphor icons (`phosphor-react-native`) + `className` styling, JS `<Tabs>`, TanStack Query
+  hooks in `mobile/hooks/`.
   Don't switch to @expo/ui, NativeTabs, SF Symbols or Expo Router data loaders, and don't restructure folders.
 - Don't submit Expo skill feedback and don't enable telemetry.
 - The Expo MCP is optional. If it isn't connected, carry on without it.
@@ -115,12 +122,13 @@
 - `@Can('items.delete')` requires that permission. `@CurrentUser() user: AuthUser` gives the logged-in user.
   All three come from `api/src/auth/auth.decorators.ts`.
 - New permission: add it to `api/src/auth/permissions.ts` AND `types.ts` in web/mobile. Then give it to roles
-  on the web Roles page or in `api/prisma/seed.ts`. The `admin` role has `*` (everything).
+  on the mobile Roles screen (parents) or in `api/prisma/seed.ts`. The `admin` role has `*` (everything).
 - Frontends: `useMe()` is the current user, `const can = useCan(); can('items.delete')` hides buttons/links/tabs
   (`hooks/useAuth.ts`). Web pages in `routes/_app/` and mobile screens in `app/(app)/` need login.
 - Sessions: web uses an httpOnly cookie; mobile keeps the token in SecureStore and sends `Authorization: Bearer`.
-- Sign-up: name + email + password, logged in right away. Seeded admin: see `api/prisma/seed.ts`.
-  Emails in `ADMIN_EMAILS` (api/.env) become admin when they sign up.
+- No sign-up (`POST /auth/register` → 403 "Ask Mom or Dad…"). Mom and Dad (`users.manage`, `roles.manage`) make every
+  account and role: `POST /users`, `/roles` (mobile Accounts and Roles screens). They can't delete themselves, change
+  their own role, or delete Guest (Jarvis uses it for unknown voices). Seeded logins: see `api/prisma/seed.ts`.
 - Auth endpoints are rate limited (`@UseGuards(ThrottlerGuard)` on AuthController). Add the same to any new
   public endpoint that checks a password.
 
