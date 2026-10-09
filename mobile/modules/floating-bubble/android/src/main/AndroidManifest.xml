@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- "Draw over other apps" — the chat head is a window on top of the home
+       screen, so Android makes the user grant this by hand in Settings. -->
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+</manifest>

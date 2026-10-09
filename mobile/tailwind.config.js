@@ -71,14 +71,19 @@ module.exports = {
           edge: 'hsl(var(--sunken-edge))',
         },
       },
-      // Lexend, loaded via useFonts in app/_layout.tsx. Four static weights
-      // (no variable font), so each weight is its own family rather than a
+      // Fredoka, loaded via useFonts in app/_layout.tsx. Static cuts (not the
+      // variable font), so each weight is its own family rather than a
       // fontWeight on one family — see components/ui/text.tsx.
+      // Default body weight is SemiBold (600) — Regular reads too light at
+      // phone sizes. `sans-regular` is there if a block needs the lighter cut.
+      // Fredoka stops at Bold, so `sans-black` draws Bold too.
       fontFamily: {
-        sans: ['Lexend-Regular'],
-        'sans-medium': ['Lexend-Medium'],
-        'sans-semibold': ['Lexend-SemiBold'],
-        'sans-bold': ['Lexend-Bold'],
+        sans: ['Fredoka-SemiBold'],
+        'sans-regular': ['Fredoka-Regular'],
+        'sans-medium': ['Fredoka-Medium'],
+        'sans-semibold': ['Fredoka-SemiBold'],
+        'sans-bold': ['Fredoka-Bold'],
+        'sans-black': ['Fredoka-Bold'],
       },
       borderRadius: {
         lg: 'var(--radius)',

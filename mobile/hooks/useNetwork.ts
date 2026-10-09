@@ -13,12 +13,12 @@ export const BLOCK_CATEGORIES: readonly { key: BlockCategory; label: string; exa
 ];
 
 const SEED_DEVICES: HomeDevice[] = [
-  { id: 'dev-ana-laptop', name: "Ana's laptop", kind: 'laptop', ownerId: 'ana', online: true, lastSeen: '2026-10-10T09:20:00.000Z', blocked: ['social', 'games'], paused: false },
-  { id: 'dev-ana-phone', name: "Ana's phone", kind: 'phone', ownerId: 'ana', online: true, lastSeen: '2026-10-10T09:22:00.000Z', blocked: ['adult'], paused: false },
-  { id: 'dev-miguel-tablet', name: "Miguel's tablet", kind: 'tablet', ownerId: 'miguel', online: true, lastSeen: '2026-10-10T09:18:00.000Z', blocked: ['social', 'adult', 'chat'], paused: true },
+  { id: 'dev-ana-laptop', name: "Ana's laptop", kind: 'laptop', ownerId: 'Ana', online: true, lastSeen: '2026-10-10T09:20:00.000Z', blocked: ['social', 'games'], paused: false },
+  { id: 'dev-ana-phone', name: "Ana's phone", kind: 'phone', ownerId: 'Ana', online: true, lastSeen: '2026-10-10T09:22:00.000Z', blocked: ['adult'], paused: false },
+  { id: 'dev-miguel-tablet', name: "Ben's tablet", kind: 'tablet', ownerId: 'Ben', online: true, lastSeen: '2026-10-10T09:18:00.000Z', blocked: ['social', 'adult', 'chat'], paused: true },
   { id: 'dev-living-tv', name: 'Living room TV', kind: 'tv', online: true, lastSeen: '2026-10-10T09:05:00.000Z', blocked: [], paused: false },
-  { id: 'dev-console', name: 'PlayStation', kind: 'console', ownerId: 'miguel', online: false, lastSeen: '2026-10-09T21:40:00.000Z', blocked: [], paused: false },
-  { id: 'dev-rosa-phone', name: "Rosa's phone", kind: 'phone', ownerId: 'rosa', online: true, lastSeen: '2026-10-10T09:24:00.000Z', blocked: [], paused: false },
+  { id: 'dev-console', name: 'PlayStation', kind: 'console', ownerId: 'Ben', online: false, lastSeen: '2026-10-09T21:40:00.000Z', blocked: [], paused: false },
+  { id: 'dev-rosa-phone', name: "Mom's phone", kind: 'phone', ownerId: 'Mom', online: true, lastSeen: '2026-10-10T09:24:00.000Z', blocked: [], paused: false },
   { id: 'dev-unknown', name: 'Unknown device', kind: 'unknown', online: true, lastSeen: '2026-10-10T08:58:00.000Z', blocked: ['adult'], paused: false, isNew: true },
 ];
 

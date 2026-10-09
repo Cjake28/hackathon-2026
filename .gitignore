@@ -6,3 +6,6 @@ web/src/routeTree.gen.ts
 ai-bench.md
 *.local.md
 backups/
+.expo/
+mobile/modules/*/android/build/
+mobile/modules/*/android/.gradle/

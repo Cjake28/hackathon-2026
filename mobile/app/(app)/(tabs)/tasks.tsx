@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { ListChecks, Plus } from 'phosphor-react-native';
+import { ListChecks, Plus, Trophy } from 'phosphor-react-native';
 import { useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,49 +8,65 @@ import { FamilyAvatar } from '@/components/FamilyAvatar';
 import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardList } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
-import { useFamilyStore, useSpeaker } from '@/hooks/useFamily';
-import { STATUS_LABELS, useTasksStore } from '@/hooks/useTasks';
-import { can } from '@/lib/family-permissions';
+import { useCan, useMe } from '@/hooks/useAuth';
+import { useHubTasks, usePoints, useSetTaskDone } from '@/hooks/useHub';
 import { cn } from '@/lib/utils';
-import type { FamilyTask } from '@/types';
+import type { HubTask } from '@/types';
 
-type Filter = 'open' | 'checking' | 'mine' | 'done';
+type Filter = 'open' | 'mine' | 'done';
 const FILTERS: { key: Filter; label: string }[] = [
-  { key: 'open', label: 'Open' },
-  { key: 'checking', label: 'To check' },
+  { key: 'open', label: 'To do' },
   { key: 'mine', label: 'Mine' },
   { key: 'done', label: 'Done' },
 ];
 
-// Every task and chore in the house. "To check" is the queue a parent lives
-// in — chores submitted with photos, waiting on a decision.
+const STATUS_LABELS: Record<HubTask['status'], string> = {
+  pending: 'Not done yet',
+  redo: 'Needs another go',
+  done: 'Done',
+};
+
+// Every task and chore in the house. Ticking the box is the whole interaction:
+// the hub tells Mom and Dad straight away, and a finished chore is worth points.
 export default function TasksScreen() {
   const insets = useSafeAreaInsets();
-  const members = useFamilyStore((state) => state.members);
-  const speaker = useSpeaker();
-  const tasks = useTasksStore((state) => state.tasks);
+  const can = useCan();
+  const { data: me } = useMe();
+  const canAssign = can('tasks.assign');
+
+  const { data: tasks = [] } = useHubTasks(canAssign);
+  const { data: points = [] } = usePoints();
+  const setDone = useSetTaskDone();
+
   const [filter, setFilter] = useState<Filter>('open');
 
-  const toCheck = tasks.filter((task) => task.status === 'submitted');
-
   const visible = useMemo(() => {
-    const byNewest = (a: FamilyTask, b: FamilyTask) => b.createdAt.localeCompare(a.createdAt);
+    const byNewest = (a: HubTask, b: HubTask) => b.createdAt.localeCompare(a.createdAt);
     switch (filter) {
-      case 'checking':
-        return [...toCheck].sort(byNewest);
       case 'mine':
-        return tasks.filter((task) => task.assigneeId === speaker.id).sort(byNewest);
+        return tasks.filter((task) => task.assigneeId === me?.id).sort(byNewest);
       case 'done':
-        return tasks.filter((task) => task.status === 'approved').sort(byNewest);
+        return tasks.filter((task) => task.status === 'done').sort(byNewest);
       default:
-        return tasks.filter((task) => task.status !== 'approved').sort(byNewest);
+        return tasks.filter((task) => task.status !== 'done').sort(byNewest);
     }
-  }, [tasks, toCheck, filter, speaker.id]);
+  }, [tasks, filter, me?.id]);
 
-  const canAssign = can(speaker.role, 'assignTasks');
+  const openCount = tasks.filter((task) => task.status !== 'done').length;
+  const doneCount = tasks.filter((task) => task.status === 'done').length;
+
+  // Only the assignee can tick a task off; a parent can undo one.
+  const toggle = (task: HubTask) => {
+    if (task.assigneeId !== me?.id && !canAssign) {
+      Alert.alert('That task is for someone else.');
+      return;
+    }
+    setDone.mutate({ id: task.id, done: task.status !== 'done' });
+  };
 
   return (
     <View className="flex-1 bg-background">
@@ -58,6 +74,7 @@ export default function TasksScreen() {
         <Text variant="h3">Tasks</Text>
         <Pressable
           hitSlop={12}
+          testID="task-new"
           onPress={() => {
             if (!canAssign) {
               Alert.alert('Only a parent can give out tasks.');
@@ -72,23 +89,27 @@ export default function TasksScreen() {
 
       <FlatList
         data={visible}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.id)}
         contentContainerClassName="gap-2 px-4 pt-4"
         contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}
         ListHeaderComponent={
           <View className="gap-3 pb-3">
             <View className="flex-row justify-between">
-              <Text variant="small" className={toCheck.length > 0 ? 'text-warning' : 'text-muted-foreground'}>
-                {toCheck.length} waiting on a check
+              <Text variant="small" className={openCount > 0 ? 'text-warning' : 'text-muted-foreground'}>
+                {openCount} still to do
               </Text>
               <Text variant="small" className="text-success">
-                {tasks.filter((task) => task.status === 'approved').length} done today
+                {doneCount} finished
               </Text>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-4" contentContainerClassName="gap-2 px-4">
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              className="-mx-4"
+              contentContainerClassName="gap-2 px-4"
+            >
               {FILTERS.map((item) => {
                 const selected = item.key === filter;
-                const count = item.key === 'checking' ? toCheck.length : 0;
                 return (
                   <Button
                     key={item.key}
@@ -99,11 +120,6 @@ export default function TasksScreen() {
                     <Text className={selected ? 'text-primary-foreground' : undefined} numberOfLines={1}>
                       {item.label}
                     </Text>
-                    {count > 0 ? (
-                      <Badge className={selected ? 'bg-card' : undefined}>
-                        <Text className={selected ? 'text-foreground' : 'text-primary-foreground'}>{count}</Text>
-                      </Badge>
-                    ) : null}
                   </Button>
                 );
               })}
@@ -111,28 +127,60 @@ export default function TasksScreen() {
           </View>
         }
         renderItem={({ item }) => {
-          const assignee = members.find((member) => member.id === item.assigneeId);
+          const done = item.status === 'done';
           return (
-            <Button variant="ghost" className="h-auto justify-start p-0" onPress={() => router.push(`/task/${item.id}`)}>
-              <Card className={cn('w-full flex-row items-center gap-3 p-3', item.kind === 'chore' && 'border-l-4 border-l-primary')}>
-                {assignee ? <FamilyAvatar member={assignee} size={46} /> : null}
+            <Card
+              className={cn('w-full flex-row items-center gap-3 p-3', item.isChore && 'border-l-4 border-l-primary')}
+            >
+              <Checkbox testID={`task-check-${item.id}`} checked={done} onCheckedChange={() => toggle(item)} />
+              <Pressable className="flex-1 flex-row items-center gap-3" onPress={() => router.push(`/task/${item.id}`)}>
+                <FamilyAvatar member={{ id: item.assigneeId, name: item.assigneeName }} size={42} />
                 <View className="flex-1 gap-0.5">
-                  <Text className="font-medium" numberOfLines={1}>{item.title}</Text>
-                  <Text variant="muted" numberOfLines={1}>{assignee?.name ?? 'Unassigned'} · {STATUS_LABELS[item.status]}</Text>
+                  <Text className={cn('font-medium', done && 'text-muted-foreground line-through')} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  <Text variant="muted" numberOfLines={1}>
+                    {item.assigneeName} · {STATUS_LABELS[item.status]}
+                  </Text>
                 </View>
-                <Badge variant={item.status === 'submitted' ? 'secondary' : 'outline'}>
-                  <Text>{item.points} pts</Text>
+              </Pressable>
+              {item.isChore ? (
+                <Badge variant={done ? 'secondary' : 'outline'}>
+                  <Text>10 pts</Text>
                 </Badge>
-              </Card>
-            </Button>
+              ) : null}
+            </Card>
           );
         }}
         ListEmptyComponent={
           <EmptyState
             icon={ListChecks}
-            title={filter === 'checking' ? 'Nothing to check' : filter === 'done' ? 'Nothing finished yet' : 'Nothing outstanding'}
-            subtitle={filter === 'checking' ? 'When someone finishes a chore, the before and after photos land here.' : 'Say "Hey Nova, tell Miguel to put the bins out" and it\'ll appear on his device.'}
+            title={filter === 'done' ? 'Nothing finished yet' : 'Nothing outstanding'}
+            subtitle={'Say "Hey Jarvis, tell Ben to put the bins out" and it\'ll pop up on his phone.'}
           />
+        }
+        ListFooterComponent={
+          points.length > 0 ? (
+            <View className="gap-2 pt-6">
+              <Text variant="label">Points</Text>
+              <Card className="p-4">
+                <CardList>
+                  {points.map((row) => (
+                    <View key={row.userId} className="flex-row items-center gap-3 py-2">
+                      <FamilyAvatar member={{ id: row.userId, name: row.name }} size={36} />
+                      <Text className="flex-1 font-medium" numberOfLines={1}>
+                        {row.name}
+                      </Text>
+                      <Icon as={Trophy} weight="fill" size={14} className="text-accent-amber-base" />
+                      <Text variant="small" className="text-muted-foreground">
+                        {row.points} pts · {row.choresDone} chores
+                      </Text>
+                    </View>
+                  ))}
+                </CardList>
+              </Card>
+            </View>
+          ) : null
         }
       />
     </View>

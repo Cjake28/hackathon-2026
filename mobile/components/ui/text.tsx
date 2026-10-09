@@ -4,7 +4,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 import { Platform, Text as RNText, type Role } from 'react-native';
 
-// Four static Lexend weights, each its own font-family (see
+// Four static Fredoka weights, each its own font-family (see
 // tailwind.config.js) rather than a `font-weight` on one family — static TTFs
 // don't synthesize weight reliably, especially on Android.
 const textVariants = cva(

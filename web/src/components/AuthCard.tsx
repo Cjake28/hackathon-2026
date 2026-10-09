@@ -16,10 +16,11 @@ export function AuthCard(props: {
   footer?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
-      <Card className="w-full max-w-sm">
+    <div className="flex min-h-screen items-center justify-center px-4">
+      <Card className="w-full max-w-sm shadow-lifted">
         <CardHeader>
-          <CardTitle className="text-xl">{props.title}</CardTitle>
+          <div className="mb-1 size-9 rounded-xl bg-primary shadow-[0_0_20px_2px_var(--primary)]" />
+          <CardTitle className="font-heading text-xl">{props.title}</CardTitle>
           {props.description && <CardDescription>{props.description}</CardDescription>}
         </CardHeader>
         <CardContent className="space-y-4">{props.children}</CardContent>

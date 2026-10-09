@@ -1,45 +1,70 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { Camera, ListChecks, Star, Trash, Trophy, Warning } from 'phosphor-react-native';
+import { Check, ListChecks, Sparkle, Star, Trash, Trophy } from 'phosphor-react-native';
 import { useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { EmptyState } from '@/components/EmptyState';
 import { FamilyAvatar } from '@/components/FamilyAvatar';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardList } from '@/components/ui/card';
 import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
-import { ROOMS, useFamilyStore, useSpeaker } from '@/hooks/useFamily';
-import { STATUS_LABELS, useTasksStore } from '@/hooks/useTasks';
-import { can } from '@/lib/family-permissions';
+import { useCan, useMe } from '@/hooks/useAuth';
+import { useCreateTask, useDeleteTask, useHubFamily, useHubTasks, useSetTaskDone } from '@/hooks/useHub';
+import { relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
-import type { TaskKind } from '@/types';
+import type { HubTask } from '@/types';
 
-const DUE_OPTIONS = ['Now', 'Before dinner', 'Before screen time', 'Tonight', 'Tomorrow'];
+const STATUS_LABELS: Record<HubTask['status'], string> = {
+  pending: 'Not done yet',
+  redo: 'Needs another go',
+  done: 'Done',
+};
+
+// How long the task has to be finished — turned into a real time for the hub.
+const DUE_OPTIONS: { label: string; hours: number | null }[] = [
+  { label: 'No deadline', hours: null },
+  { label: 'Within the hour', hours: 1 },
+  { label: 'Before dinner', hours: 6 },
+  { label: 'Tonight', hours: 12 },
+  { label: 'Tomorrow', hours: 24 },
+];
 
 function AssignTaskScreen() {
-  const members = useFamilyStore((state) => state.members);
-  const speaker = useSpeaker();
-  const assign = useTasksStore((state) => state.assign);
+  const { data: people = [] } = useHubFamily();
+  const create = useCreateTask();
 
-  const assignable = [...members].sort((a, b) => (a.role === b.role ? 0 : a.role === 'child' ? -1 : 1));
+  // Kids first: they're who a chore usually goes to.
+  const assignable = [...people].sort((a, b) => (a.role === b.role ? 0 : a.role === 'child' ? -1 : 1));
 
   const [title, setTitle] = useState('');
-  const [detail, setDetail] = useState('');
-  const [assigneeId, setAssigneeId] = useState(assignable.find((m) => m.role === 'child')?.id ?? assignable[0]?.id);
-  const [kind, setKind] = useState<TaskKind>('chore');
-  const [due, setDue] = useState('Before dinner');
-  const [room, setRoom] = useState<string | undefined>();
+  const [checklist, setChecklist] = useState('');
+  const [assigneeId, setAssigneeId] = useState<number | undefined>(undefined);
+  const [isChore, setIsChore] = useState(true);
+  const [due, setDue] = useState(DUE_OPTIONS[2]);
 
-  const assignee = members.find((member) => member.id === assigneeId);
-  const ready = title.trim().length > 0 && Boolean(assigneeId);
+  const chosen = assigneeId ?? assignable.find((p) => p.role === 'child')?.id ?? assignable[0]?.id;
+  const assignee = assignable.find((person) => person.id === chosen);
+  const ready = title.trim().length > 0 && chosen !== undefined;
 
   const give = () => {
-    if (!ready || !assigneeId) return;
-    const id = assign({ title, detail, kind, assigneeId, assignedById: speaker.id, due, room });
-    router.replace(`/task/${id}`);
+    if (!ready || chosen === undefined) return;
+    create.mutate(
+      {
+        title: title.trim(),
+        assigneeId: chosen,
+        isChore,
+        // One line each: what "done" looks like.
+        checklist: checklist
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean),
+        dueAt: due.hours ? new Date(Date.now() + due.hours * 3_600_000).toISOString() : undefined,
+      },
+      { onSuccess: () => router.replace('/(app)/(tabs)/tasks') },
+    );
   };
 
   return (
@@ -49,12 +74,19 @@ function AssignTaskScreen() {
         <View className="gap-2">
           <Text variant="label">Who's doing it</Text>
           <View className="flex-row flex-wrap gap-2">
-            {assignable.map((member) => {
-              const selected = member.id === assigneeId;
+            {assignable.map((person) => {
+              const selected = person.id === chosen;
               return (
-                <Pressable key={member.id} onPress={() => setAssigneeId(member.id)} className={cn('w-[68px] items-center gap-1 rounded-md py-2', selected && 'bg-primary-soft')}>
-                  <FamilyAvatar member={member} size={56} />
-                  <Text className="text-xs" numberOfLines={1}>{member.name}</Text>
+                <Pressable
+                  key={person.id}
+                  testID={`task-assignee-${person.id}`}
+                  onPress={() => setAssigneeId(person.id)}
+                  className={cn('w-[68px] items-center gap-1 rounded-md py-2', selected && 'bg-primary-soft')}
+                >
+                  <FamilyAvatar member={person} size={56} />
+                  <Text className="text-xs" numberOfLines={1}>
+                    {person.name}
+                  </Text>
                 </Pressable>
               );
             })}
@@ -63,31 +95,66 @@ function AssignTaskScreen() {
 
         <View className="gap-2">
           <Text variant="label">What they have to do</Text>
-          <Input value={title} onChangeText={setTitle} placeholder="Wash up after dinner" returnKeyType="next" />
+          <Input
+            testID="task-title"
+            value={title}
+            onChangeText={setTitle}
+            placeholder="Wash up after dinner"
+            returnKeyType="next"
+          />
         </View>
 
         <View className="gap-2">
           <Text variant="label">What finished looks like</Text>
           <Text variant="small" className="text-muted-foreground">
-            Be specific. This is what the camera check compares against.
+            One thing per line. They'll see this list when they open the task.
           </Text>
-          <Input value={detail} onChangeText={setDetail} placeholder="Sink clear, counters wiped, bin out." multiline className="min-h-20 pt-3" />
+          <Input
+            testID="task-checklist"
+            value={checklist}
+            onChangeText={setChecklist}
+            placeholder={'Sink clear\nCounters wiped\nBin out'}
+            multiline
+            className="min-h-24 pt-3"
+          />
         </View>
 
         <View className="gap-2">
-          <Text variant="label">How it's checked</Text>
-          <Pressable onPress={() => setKind('chore')} className={cn('flex-row items-start gap-3 rounded-md bg-sunken p-3', kind === 'chore' && 'bg-primary-soft')}>
-            <Icon as={Camera} weight={kind === 'chore' ? 'fill' : 'regular'} size={20} className={kind === 'chore' ? 'text-primary' : 'text-muted-foreground'} />
+          <Text variant="label">Does it earn points?</Text>
+          <Pressable
+            testID="task-kind-chore"
+            onPress={() => setIsChore(true)}
+            className={cn('flex-row items-start gap-3 rounded-md bg-sunken p-3', isChore && 'bg-primary-soft')}
+          >
+            <Icon
+              as={Star}
+              weight={isChore ? 'fill' : 'regular'}
+              size={20}
+              className={isChore ? 'text-primary' : 'text-muted-foreground'}
+            />
             <View className="flex-1 gap-0.5">
-              <Text className="font-medium">Camera check</Text>
-              <Text variant="small" className="text-muted-foreground">Before and after photos, compared on the hub.</Text>
+              <Text className="font-medium">A chore — worth 10 points</Text>
+              <Text variant="small" className="text-muted-foreground">
+                Counts towards the family leaderboard when they finish it.
+              </Text>
             </View>
           </Pressable>
-          <Pressable onPress={() => setKind('task')} className={cn('flex-row items-start gap-3 rounded-md bg-sunken p-3', kind === 'task' && 'bg-primary-soft')}>
-            <Icon as={ListChecks} weight={kind === 'task' ? 'fill' : 'regular'} size={20} className={kind === 'task' ? 'text-primary' : 'text-muted-foreground'} />
+          <Pressable
+            testID="task-kind-task"
+            onPress={() => setIsChore(false)}
+            className={cn('flex-row items-start gap-3 rounded-md bg-sunken p-3', !isChore && 'bg-primary-soft')}
+          >
+            <Icon
+              as={ListChecks}
+              weight={!isChore ? 'fill' : 'regular'}
+              size={20}
+              className={!isChore ? 'text-primary' : 'text-muted-foreground'}
+            />
             <View className="flex-1 gap-0.5">
-              <Text className="font-medium">They just say so</Text>
-              <Text variant="small" className="text-muted-foreground">Done when they mark it done. No photos.</Text>
+              <Text className="font-medium">Just a task</Text>
+              <Text variant="small" className="text-muted-foreground">
+                Done when they tick it off. No points.
+              </Text>
             </View>
           </Pressable>
         </View>
@@ -96,25 +163,21 @@ function AssignTaskScreen() {
           <Text variant="label">By when</Text>
           <View className="flex-row flex-wrap gap-2">
             {DUE_OPTIONS.map((option) => (
-              <Button key={option} variant={due === option ? 'default' : 'secondary'} size="sm" onPress={() => setDue(option)}>
-                <Text className={due === option ? 'text-primary-foreground' : undefined}>{option}</Text>
+              <Button
+                key={option.label}
+                variant={due.label === option.label ? 'default' : 'secondary'}
+                size="sm"
+                onPress={() => setDue(option)}
+              >
+                <Text className={due.label === option.label ? 'text-primary-foreground' : undefined}>
+                  {option.label}
+                </Text>
               </Button>
             ))}
           </View>
         </View>
 
-        <View className="gap-2">
-          <Text variant="label">Which room</Text>
-          <View className="flex-row flex-wrap gap-2">
-            {ROOMS.map((option) => (
-              <Button key={option} variant={room === option ? 'default' : 'secondary'} size="sm" onPress={() => setRoom((current) => (current === option ? undefined : option))}>
-                <Text className={room === option ? 'text-primary-foreground' : undefined}>{option}</Text>
-              </Button>
-            ))}
-          </View>
-        </View>
-
-        <Button disabled={!ready} onPress={give}>
+        <Button testID="task-send" disabled={!ready || create.isPending} onPress={give}>
           <Text className="text-primary-foreground">{assignee ? `Send to ${assignee.name}` : 'Send'}</Text>
         </Button>
       </ScrollView>
@@ -122,17 +185,14 @@ function AssignTaskScreen() {
   );
 }
 
-function TaskDetailScreen({ id }: { id: string }) {
-  const members = useFamilyStore((state) => state.members);
-  const speaker = useSpeaker();
+function TaskDetailScreen({ id }: { id: number }) {
+  const can = useCan();
+  const { data: me } = useMe();
+  const canAssign = can('tasks.assign');
 
-  const tasks = useTasksStore((state) => state.tasks);
-  const checking = useTasksStore((state) => state.checking);
-  const start = useTasksStore((state) => state.start);
-  const submit = useTasksStore((state) => state.submit);
-  const review = useTasksStore((state) => state.review);
-  const approveManually = useTasksStore((state) => state.approveManually);
-  const remove = useTasksStore((state) => state.remove);
+  const { data: tasks = [], isPending } = useHubTasks(canAssign);
+  const setDone = useSetTaskDone();
+  const remove = useDeleteTask();
 
   const task = tasks.find((item) => item.id === id);
 
@@ -140,151 +200,147 @@ function TaskDetailScreen({ id }: { id: string }) {
     return (
       <View className="flex-1 bg-background">
         <ScreenHeader title="Task" back />
-        <EmptyState icon={ListChecks} title="This task is gone" subtitle="It may have been finished or removed." />
-        <View className="items-center">
-          <Button variant="secondary" onPress={() => router.replace('/(app)/(tabs)/tasks')}><Text>Back to tasks</Text></Button>
-        </View>
+        {isPending ? null : (
+          <>
+            <EmptyState icon={ListChecks} title="This task is gone" subtitle="It may have been finished or removed." />
+            <View className="items-center">
+              <Button variant="secondary" onPress={() => router.replace('/(app)/(tabs)/tasks')}>
+                <Text>Back to tasks</Text>
+              </Button>
+            </View>
+          </>
+        )}
       </View>
     );
   }
 
-  const assignee = members.find((member) => member.id === task.assigneeId);
-  const assigner = members.find((member) => member.id === task.assignedById);
-  const isChecking = checking.includes(task.id);
-  const isMine = task.assigneeId === speaker.id;
-  const canReview = can(speaker.role, 'reviewChores');
+  const done = task.status === 'done';
+  const isMine = task.assigneeId === me?.id;
 
-  const confirmRemove = () => {
+  const confirmRemove = () =>
     Alert.alert(task.title, 'Remove this task?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => { remove(task.id); router.back(); } },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => remove.mutate(task.id, { onSuccess: () => router.back() }),
+      },
     ]);
-  };
-
-  const footer = () => {
-    if (isChecking) return <Button disabled><Text>Checking the photos…</Text></Button>;
-
-    if (task.status === 'submitted' && canReview) {
-      return (
-        <View className="flex-row gap-3">
-          <Button variant="secondary" className="flex-1" onPress={() => approveManually(task.id)}>
-            <Text>Pass it anyway</Text>
-          </Button>
-          <Button className="flex-[1.4]" onPress={() => review(task.id)}>
-            <Icon as={Camera} weight="fill" size={20} className="text-primary-foreground" />
-            <Text className="text-primary-foreground">Check the photos</Text>
-          </Button>
-        </View>
-      );
-    }
-
-    if (!isMine) return null;
-
-    if (task.status === 'assigned') {
-      return <Button onPress={() => start(task.id)}><Text className="text-primary-foreground">{task.kind === 'chore' ? 'Start — take the before photo' : 'Start'}</Text></Button>;
-    }
-
-    if (task.status === 'doing' || task.status === 'rejected') {
-      return <Button onPress={() => submit(task.id)}><Text className="text-primary-foreground">{task.kind === 'chore' ? "I've finished — take the after photo" : 'Mark as done'}</Text></Button>;
-    }
-
-    return null;
-  };
-
-  const action = footer();
 
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader
-        title={task.kind === 'chore' ? 'Chore' : 'Task'}
+        title={task.isChore ? 'Chore' : 'Task'}
         subtitle={STATUS_LABELS[task.status]}
         back
-        right={can(speaker.role, 'assignTasks') ? (
-          <Button variant="ghost" size="icon" onPress={confirmRemove}><Icon as={Trash} /></Button>
-        ) : undefined}
+        right={
+          canAssign ? (
+            <Button variant="ghost" size="icon" testID="task-delete" onPress={confirmRemove}>
+              <Icon as={Trash} />
+            </Button>
+          ) : undefined
+        }
       />
 
       <ScrollView className="flex-1" contentContainerClassName="gap-6 px-4 pb-6">
         <Card className="gap-3 p-6">
           <Text variant="h3">{task.title}</Text>
-          {task.detail ? <Text variant="muted">{task.detail}</Text> : null}
 
           <View className="flex-row items-center gap-3 pt-1">
-            {assignee ? <FamilyAvatar member={assignee} size={48} /> : null}
+            <FamilyAvatar member={{ id: task.assigneeId, name: task.assigneeName }} size={48} />
             <View className="flex-1 gap-0.5">
-              <Text className="font-medium" numberOfLines={1}>{assignee?.name ?? 'Unassigned'}</Text>
-              <Text variant="muted" numberOfLines={1}>Given by {assigner?.name ?? 'someone'}</Text>
+              <Text className="font-medium" numberOfLines={1}>
+                {task.assigneeName}
+              </Text>
+              <Text variant="muted" numberOfLines={1}>
+                Given {relativeTime(task.createdAt)} ago
+              </Text>
             </View>
           </View>
 
           <View className="flex-row justify-between pt-1">
-            <Text variant="small" className="text-muted-foreground">Due: {task.due ?? 'No deadline'}</Text>
-            <Text variant="small" className="text-muted-foreground">{task.points} points</Text>
-            {task.room ? <Text variant="small" className="text-muted-foreground">{task.room}</Text> : null}
+            <Text variant="small" className="text-muted-foreground">
+              {task.dueAt ? `Due ${new Date(task.dueAt).toLocaleString()}` : 'No deadline'}
+            </Text>
+            {task.isChore ? (
+              <Text variant="small" className="text-muted-foreground">
+                10 points
+              </Text>
+            ) : null}
           </View>
         </Card>
 
-        {task.kind === 'chore' ? (
+        {task.checklist.length > 0 ? (
           <View className="gap-2">
-            <Text variant="label">Camera check</Text>
-            <Text variant="muted">Before and after, compared on the hub</Text>
-            <View className="flex-row gap-3">
-              <View className="flex-1 gap-1">
-                <Text variant="small" className="text-muted-foreground">Before</Text>
-                {task.beforePhoto ? (
-                  <Image source={{ uri: task.beforePhoto }} className="h-32 w-full rounded-md" />
-                ) : (
-                  <View className="h-32 items-center justify-center rounded-md bg-sunken"><Text variant="muted">Not taken</Text></View>
-                )}
-              </View>
-              <View className="flex-1 gap-1">
-                <Text variant="small" className="text-muted-foreground">After</Text>
-                {isChecking ? (
-                  <View className="h-32 items-center justify-center rounded-md bg-sunken"><Text variant="muted">Scanning…</Text></View>
-                ) : task.afterPhoto ? (
-                  <Image source={{ uri: task.afterPhoto }} className="h-32 w-full rounded-md" />
-                ) : (
-                  <View className="h-32 items-center justify-center rounded-md bg-sunken"><Text variant="muted">Not taken</Text></View>
-                )}
-              </View>
-            </View>
+            <Text variant="label">What finished looks like</Text>
+            <Card className="p-4">
+              <CardList>
+                {task.checklist.map((line) => (
+                  <View key={line} className="flex-row items-start gap-2 py-2">
+                    <Icon as={Check} weight="bold" size={16} className="mt-1 text-primary" />
+                    <Text className="flex-1">{line}</Text>
+                  </View>
+                ))}
+              </CardList>
+            </Card>
           </View>
         ) : null}
 
-        {task.status === 'approved' ? (
-          <Card className="items-center gap-3 bg-accent-teal-soft py-8">
-            <View className="h-16 w-16 items-center justify-center rounded-full bg-card">
-              <Icon as={Trophy} weight="fill" size={32} className="text-accent-teal-onSoft" />
-            </View>
-            <Text variant="h3" className="text-accent-teal-onSoft">Nice work!</Text>
-            <Badge className="bg-card">
-              <Icon as={Star} weight="fill" size={12} className="text-accent-teal-onSoft" />
-              <Text className="text-accent-teal-onSoft">+{task.points} points</Text>
-            </Badge>
-            {task.feedback ? (
-              <Text variant="small" className="max-w-xs text-center text-accent-teal-onSoft">{task.feedback}</Text>
-            ) : null}
-          </Card>
-        ) : task.feedback ? (
+        {task.feedback ? (
           <View className="gap-2">
-            <Text variant="label">What the check found</Text>
+            <Text variant="label">What Jarvis said</Text>
             <Card className="flex-row items-start gap-3 bg-accent-rose-soft p-4">
-              <Icon as={Warning} weight="fill" size={20} className="text-accent-rose-onSoft" />
+              <Icon as={Sparkle} weight="fill" size={20} className="text-accent-rose-onSoft" />
               <Text className="flex-1 text-accent-rose-onSoft">{task.feedback}</Text>
             </Card>
           </View>
         ) : null}
+
+        {done ? (
+          <Card className="items-center gap-3 bg-accent-teal-soft py-8">
+            <View className="h-16 w-16 items-center justify-center rounded-full bg-card">
+              <Icon as={Trophy} weight="fill" size={32} className="text-accent-teal-onSoft" />
+            </View>
+            <Text variant="h3" className="text-accent-teal-onSoft">
+              Nice work!
+            </Text>
+            {task.isChore ? (
+              <Badge className="bg-card">
+                <Icon as={Star} weight="fill" size={12} className="text-accent-teal-onSoft" />
+                <Text className="text-accent-teal-onSoft">+10 points</Text>
+              </Badge>
+            ) : null}
+            {task.doneAt ? (
+              <Text variant="small" className="text-accent-teal-onSoft">
+                Finished {relativeTime(task.doneAt)} ago
+              </Text>
+            ) : null}
+          </Card>
+        ) : null}
       </ScrollView>
 
-      {action ? <View className="border-t border-border p-4">{action}</View> : null}
+      {/* Ticking it off tells Mom and Dad straight away. No photo, no check. */}
+      {isMine || canAssign ? (
+        <View className="border-t border-border p-4">
+          <Button
+            testID="task-toggle"
+            variant={done ? 'secondary' : 'default'}
+            disabled={setDone.isPending}
+            onPress={() => setDone.mutate({ id: task.id, done: !done })}
+          >
+            <Text className={done ? undefined : 'text-primary-foreground'}>
+              {done ? 'Not done after all' : "I've finished it"}
+            </Text>
+          </Button>
+        </View>
+      ) : null}
     </View>
   );
 }
 
-// One route serves both view and create, keyed on the literal id "new" —
-// matches Nova's task/[id] pattern.
+// One route serves both view and create, keyed on the literal id "new".
 export default function TaskRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   if (id === 'new') return <AssignTaskScreen />;
-  return <TaskDetailScreen id={id} />;
+  return <TaskDetailScreen id={Number(id)} />;
 }

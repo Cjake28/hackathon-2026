@@ -23,18 +23,21 @@ function Card({ className, ...props }: React.ComponentProps<typeof View> & React
  * Rows inside a Card, divided by a hairline — `divide-y` doesn't render on
  * native, so this inserts an actual `<Separator />` between each row instead.
  * Use in place of a plain `.map(...)` when rows sit directly inside a Card.
+ *
+ * The wrapper drops the Card's `gap-6` so the hairline sits tight against the
+ * rows (each row brings its own `py-*`) instead of adding 24px above and below.
  */
 function CardList({ children }: { children: React.ReactNode }) {
   const rows = Children.toArray(children).filter(Boolean);
   return (
-    <>
+    <View className="gap-0">
       {rows.map((row, index) => (
         <Fragment key={index}>
           {index > 0 ? <Separator /> : null}
           {row}
         </Fragment>
       ))}
-    </>
+    </View>
   );
 }
 

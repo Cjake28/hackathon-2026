@@ -90,7 +90,7 @@ export type ConversationMessage = {
 
 export type ConversationWithMessages = Conversation & { messages: ConversationMessage[] };
 
-// --- Nova family hub (local-only, no backend — see mobile/hooks/useFamily.ts etc.) ---
+// --- Local-only screens (the network demo, the read-only calendar and budget). Everything else is on the hub. ---
 
 export type Role = 'parent' | 'child' | 'guest';
 export type RecognitionState = 'enrolled' | 'learning' | 'none';
@@ -187,3 +187,85 @@ export type Utterance = {
 };
 
 export type ListenState = 'idle' | 'listening' | 'thinking' | 'speaking';
+
+// Grocery (#58), memory (#9) and the P2 calendar/budget pages. Shapes follow
+// TEAM-PLAN.md §4.3 so these screens can swap to the API without changing.
+export type GroceryItem = {
+  id: string;
+  name: string;
+  note?: string;
+  done: boolean;
+  addedBy: string;
+};
+
+export type FamilyEvent = {
+  id: string;
+  title: string;
+  startsAt: string;
+  personId: string | null;
+};
+
+export type ExpenseCategory = 'food' | 'bills' | 'school' | 'transport' | 'other';
+
+export type Expense = {
+  id: string;
+  amount: number;
+  category: ExpenseCategory;
+  note: string;
+  addedBy: string;
+  spentAt: string;
+};
+
+// ---- Hub API (TEAM-PLAN.md 4.4, docs/mobile-hub.md). "Hub" names so they don't clash with the local types above. ----
+export type HubRole = 'admin' | 'parent' | 'child' | 'guest';
+export type Person = { id: number; name: string; role: HubRole; isHome: boolean; lastSeenAt: string | null };
+export type HubAlarm = {
+  id: number;
+  userId: number; // who it rings for
+  createdById: number; // who set it (a child can't delete or turn off an alarm a parent set)
+  kind: 'alarm' | 'reminder';
+  label: string;
+  time: string; // "06:30", 24h, hub time
+  repeat: 'once' | 'daily' | 'weekdays';
+  nextAt: string;
+  enabled: boolean;
+  ringingAt: string | null; // set while it rings
+};
+export type HubTask = {
+  id: number;
+  title: string;
+  assigneeId: number;
+  assigneeName: string;
+  createdById: number;
+  isChore: boolean;
+  checklist: string[]; // what "done" looks like
+  dueAt: string | null;
+  status: 'pending' | 'redo' | 'done';
+  beforePhoto: string | null;
+  afterPhoto: string | null;
+  feedback: string | null;
+  createdAt: string;
+  doneAt: string | null;
+};
+export type NoticeKind =
+  | 'alarm:ring'
+  | 'task:new'
+  | 'task:reviewed'
+  | 'presence:arrived'
+  | 'presence:left'
+  | 'voice:heard'
+  | 'intercom';
+export type HubNotice = {
+  id: number;
+  toUserId: number | null; // null = every device
+  kind: NoticeKind;
+  text: string;
+  data: any;
+  createdAt: string;
+};
+export type Poll = { cursor: number; notices: HubNotice[]; ringing: HubAlarm[]; home: Person[] };
+export type VoiceReply = { reply: string; speaker: { id: number; name: string; role: HubRole }; pending: boolean };
+export type Points = { userId: number; name: string; points: number; choresDone: number };
+export type MemoryNote = { id: number; userId: number; text: string; createdAt: string };
+// A role as GET /roles returns it (parents edit these). Family accounts use the existing `User` type above.
+export type RoleRow = { id: number; name: string; permissions: string[]; _count: { users: number } };

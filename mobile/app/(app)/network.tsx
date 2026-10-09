@@ -7,9 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
-import { useFamilyStore, useSpeaker } from '@/hooks/useFamily';
+import { useCan } from '@/hooks/useAuth';
 import { describeRules, sortDevices, useNetworkStore } from '@/hooks/useNetwork';
-import { can } from '@/lib/family-permissions';
 import { relativeTime } from '@/lib/time';
 import type { DeviceKind } from '@/types';
 
@@ -29,10 +28,10 @@ export default function NetworkScreen() {
   const devices = useNetworkStore((state) => state.devices);
   const acknowledgeNew = useNetworkStore((state) => state.acknowledgeNew);
   const setPaused = useNetworkStore((state) => state.setPaused);
-  const members = useFamilyStore((state) => state.members);
-  const speaker = useSpeaker();
+  const can = useCan();
 
-  const canManage = can(speaker.role, 'network');
+  // The internet rules are a parent thing, same as setting someone else's alarm.
+  const canManage = can('alarms.family');
   const sorted = sortDevices(devices);
   const unknown = sorted.filter((device) => device.isNew);
   const known = sorted.filter((device) => !device.isNew);
@@ -88,7 +87,6 @@ export default function NetworkScreen() {
           </View>
           <View className="gap-2">
             {known.map((device) => {
-              const owner = members.find((member) => member.id === device.ownerId);
               return (
                 <Pressable key={device.id} onPress={() => router.push(`/device/${device.id}`)}>
                   <Card className="flex-row items-center gap-3 p-4">
@@ -101,7 +99,7 @@ export default function NetworkScreen() {
                     <View className="flex-1 gap-0.5">
                       <Text className="font-medium" numberOfLines={1}>{device.name}</Text>
                       <Text variant="muted" numberOfLines={1}>
-                        {device.online ? (owner ? `${owner.name} · online` : 'Online') : `Last seen ${relativeTime(device.lastSeen)} ago`}
+                        {device.online ? (device.ownerId ? `${device.ownerId} · online` : 'Online') : `Last seen ${relativeTime(device.lastSeen)} ago`}
                       </Text>
                     </View>
                     <Badge variant={device.paused ? 'destructive' : device.blocked.length > 0 ? 'secondary' : 'outline'}>

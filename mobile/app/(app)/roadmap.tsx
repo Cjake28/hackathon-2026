@@ -96,7 +96,7 @@ export default function RoadmapScreen() {
         <Card className="gap-3 p-6">
           <Text variant="h3">{COUNTS.total} features</Text>
           <Text variant="muted">
-            Everything Nova is meant to do, in the order it was agreed. Nine are built and demoable today; the rest is the plan.
+            Everything Jarvis is meant to do, in the order it was agreed. Nine are built and demoable today; the rest is the plan.
           </Text>
           <View className="flex-row justify-between">
             <Text variant="small" className="text-success">{COUNTS.demo} working now</Text>

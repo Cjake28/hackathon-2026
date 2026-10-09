@@ -4,6 +4,7 @@ import { Plus, Sparkles, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
@@ -44,7 +45,7 @@ function ItemsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Items</h1>
+        <h1 className="font-heading text-2xl font-semibold tracking-tight">Items</h1>
         <div className="flex gap-2">
           {can('items.create') && can('ai.use') && <GenerateItemsDialog />}
           {can('items.create') && <NewItemDialog />}
@@ -52,8 +53,9 @@ function ItemsPage() {
       </div>
 
       {isLoading ? (
-        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-40 w-full rounded-xl" />
       ) : (
+        <Card className="p-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -99,6 +101,7 @@ function ItemsPage() {
             )}
           </TableBody>
         </Table>
+        </Card>
       )}
     </div>
   );

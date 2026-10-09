@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Alarm, CaretRight, Cpu, GearSix, Lock, MapPin, Signpost, SpeakerHigh, User, WifiSlash } from 'phosphor-react-native';
+import { Alarm, Basket, Brain, CalendarBlank, CaretRight, Cpu, GearSix, Lock, MapPin, ShieldCheck, Signpost, SpeakerHigh, User, UsersThree, Wallet, WifiSlash } from 'phosphor-react-native';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar';
@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardList } from '@/components/ui/card';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
-import { useAlarmsStore } from '@/hooks/useAlarms';
+import { useCan } from '@/hooks/useAuth';
+import { useHubAlarms } from '@/hooks/useHub';
 import { accents } from '@/lib/accents';
 import { cn } from '@/lib/utils';
 import type { AccentName } from '@/types';
@@ -30,15 +31,6 @@ const ON_HUB_ONLY = [
 ];
 
 const NEEDS_INTERNET = ['Where someone is when they’re out', 'Weather and typhoon alerts', 'Remote access while you’re away'];
-
-function SectionLabel({ icon, children }: { icon: React.ComponentProps<typeof Icon>['as']; children: React.ReactNode }) {
-  return (
-    <View className="flex-row items-center gap-1.5">
-      <Icon as={icon} weight="regular" size={18} className="text-muted-foreground" />
-      <Text variant="label">{children}</Text>
-    </View>
-  );
-}
 
 function ManageRow({
   icon,
@@ -72,7 +64,8 @@ function ManageRow({
 // short list of the handful of things that genuinely need the internet.
 export default function HubScreen() {
   const insets = useSafeAreaInsets();
-  const alarms = useAlarmsStore((state) => state.alarms);
+  const can = useCan();
+  const { data: alarms = [] } = useHubAlarms(can('alarms.family') ? { all: true } : {});
   const activeAlarms = alarms.filter((alarm) => alarm.enabled).length;
 
   return (
@@ -83,30 +76,39 @@ export default function HubScreen() {
       </View>
 
       <ScrollView className="flex-1" contentContainerClassName="gap-6 px-4" contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}>
-        <Card className="items-center gap-3 py-8">
-          <View className="relative">
-            <View className="h-20 w-20 items-center justify-center rounded-full bg-primary-soft">
-              <Icon as={Cpu} weight="regular" size={36} className="text-primary-soft-foreground" />
+        {/* Chunky 3D panel, same as the home screen: green face on a darker green edge. */}
+        <View className="rounded-3xl bg-primary-edge pb-1.5">
+          <Card className="items-center gap-4 border-0 bg-primary py-8">
+            <View className="relative">
+              <View className="h-24 w-24 items-center justify-center rounded-full bg-white/20">
+                <Icon as={Cpu} weight="fill" size={38} className="text-white" />
+              </View>
+              <View className="absolute -bottom-0.5 -right-0.5 h-6 w-6 items-center justify-center rounded-full bg-primary">
+                <View className="h-3 w-3 rounded-full bg-white" />
+              </View>
             </View>
-            <View className="absolute -bottom-0.5 -right-0.5 h-5 w-5 items-center justify-center rounded-full bg-card">
-              <View className="h-3 w-3 rounded-full bg-success" />
+            <View className="items-center gap-1">
+              <Text className="text-xl font-sans-bold text-white">{HUB.name}</Text>
+              <Text variant="small" className="text-center text-white/80">
+                Sitting in the {HUB.location.toLowerCase()}, running on its own hardware
+              </Text>
             </View>
-          </View>
-          <View className="items-center gap-1.5">
-            <Text variant="h3">{HUB.name}</Text>
-            <Badge className="bg-success-soft">
-              <Text className="text-success">Online</Text>
-            </Badge>
-          </View>
-          <Text variant="muted" className="text-center">
-            Sitting in the {HUB.location.toLowerCase()}, running a model on its own hardware.
-          </Text>
-          <View className="w-full flex-row justify-between px-6">
-            <Text variant="small" className="text-success">{HUB.model}</Text>
-            <Text variant="small" className="text-muted-foreground">{HUB.storage}</Text>
-            <Text variant="small" className="text-muted-foreground">{HUB.uptimeDays} days up</Text>
-          </View>
-        </Card>
+            <View className="w-full flex-row flex-wrap justify-center gap-2 px-4">
+              <Badge className="bg-white/20">
+                <Text className="text-white">● Online</Text>
+              </Badge>
+              <Badge className="bg-white/20">
+                <Text className="text-white">{HUB.model}</Text>
+              </Badge>
+              <Badge className="bg-white/20">
+                <Text className="text-white">{HUB.uptimeDays} days up</Text>
+              </Badge>
+              <Badge className="bg-white/20">
+                <Text className="text-white">{HUB.storage}</Text>
+              </Badge>
+            </View>
+          </Card>
+        </View>
 
         <Card className="flex-row items-start gap-3 bg-accent-teal-soft p-4">
           <Icon as={WifiSlash} weight="regular" className="text-accent-teal-onSoft" size={24} />
@@ -119,7 +121,7 @@ export default function HubScreen() {
         </Card>
 
         <View className="gap-2">
-          <SectionLabel icon={SpeakerHigh}>Where it listens</SectionLabel>
+          <Text variant="label">Where it listens</Text>
           <Card className="p-4">
             <CardList>
               {HUB_ROOMS.map((room) => (
@@ -144,7 +146,7 @@ export default function HubScreen() {
         </View>
 
         <View className="gap-2">
-          <SectionLabel icon={Lock}>What stays here</SectionLabel>
+          <Text variant="label">What stays here</Text>
           <Text variant="muted">None of this leaves the house</Text>
           <Card className="p-4">
             <CardList>
@@ -159,7 +161,7 @@ export default function HubScreen() {
         </View>
 
         <View className="gap-2">
-          <SectionLabel icon={MapPin}>What needs the internet</SectionLabel>
+          <Text variant="label">What needs the internet</Text>
           <Text variant="muted">These stop working when the line goes down</Text>
           <Card className="bg-sunken p-4">
             <CardList>
@@ -174,11 +176,21 @@ export default function HubScreen() {
         </View>
 
         <View className="gap-2">
-          <SectionLabel icon={GearSix}>Manage</SectionLabel>
+          <Text variant="label">Manage</Text>
           <Card className="p-4">
             <CardList>
+              <ManageRow icon={Basket} accent="teal" title="Grocery" description="The household shopping list" onPress={() => router.push("/grocery")} />
+              <ManageRow icon={Brain} accent="rose" title="What Jarvis remembers" description="Notes about each person, delete any" onPress={() => router.push("/memory")} />
+              <ManageRow icon={CalendarBlank} accent="azure" title="Calendar" description="What is coming up this week" onPress={() => router.push("/calendar")} />
+              <ManageRow icon={Wallet} accent="violet" title="Budget" description="What the house spent this month" onPress={() => router.push("/budget")} />
               <ManageRow icon={Alarm} accent="amber" title="Alarms" description={activeAlarms === 1 ? '1 on' : `${activeAlarms} on`} onPress={() => router.push('/(app)/(tabs)/alarms')} />
-              <ManageRow icon={Signpost} accent="violet" title="What's coming" description="Everything planned for Nova" onPress={() => router.push('/roadmap')} />
+              {can('users.manage') ? (
+                <ManageRow icon={UsersThree} accent="arc" title="Family accounts" description="Make a login for someone in the house" onPress={() => router.push('/accounts')} />
+              ) : null}
+              {can('roles.manage') ? (
+                <ManageRow icon={ShieldCheck} accent="teal" title="Roles" description="What each role is allowed to do" onPress={() => router.push('/roles')} />
+              ) : null}
+              <ManageRow icon={Signpost} accent="violet" title="What's coming" description="Everything planned for Jarvis" onPress={() => router.push('/roadmap')} />
               <ManageRow icon={User} accent="azure" title="Your details" description="Name and email on this device" onPress={() => router.push('/personal-info')} />
               <ManageRow icon={GearSix} accent="teal" title="Settings" description="Hub behaviour and privacy" onPress={() => router.push('/settings')} />
             </CardList>

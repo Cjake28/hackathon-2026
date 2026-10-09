@@ -9,9 +9,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useColorScheme } from 'nativewind';
 import { useEffect } from 'react';
-import { useAlarmsStore } from '@/hooks/useAlarms';
-import { useFamilyStore } from '@/hooks/useFamily';
-import { useTasksStore } from '@/hooks/useTasks';
 import { queryClient } from '@/lib/query';
 import { NAV_THEME } from '@/lib/theme';
 
@@ -22,31 +19,24 @@ export {
 
 SplashScreen.preventAutoHideAsync();
 
-// Every screen under app/(app)/ is reachable with no login — the hub is
-// shared by the whole household (see app/(app)/_layout.tsx).
+// Every screen under app/(app)/ needs a login: the hub has to know whose phone this is
+// (see app/(app)/_layout.tsx). Family, tasks and alarms all live on the hub, not here.
 export default function RootLayout() {
   const { colorScheme } = useColorScheme();
 
   const [fontsLoaded] = useFonts({
-    'Lexend-Regular': require('@/assets/fonts/Lexend-Regular.ttf'),
-    'Lexend-Medium': require('@/assets/fonts/Lexend-Medium.ttf'),
-    'Lexend-SemiBold': require('@/assets/fonts/Lexend-SemiBold.ttf'),
-    'Lexend-Bold': require('@/assets/fonts/Lexend-Bold.ttf'),
+    'Fredoka-Regular': require('@/assets/fonts/Fredoka-Regular.ttf'),
+    'Fredoka-Medium': require('@/assets/fonts/Fredoka-Medium.ttf'),
+    'Fredoka-SemiBold': require('@/assets/fonts/Fredoka-SemiBold.ttf'),
+    'Fredoka-Bold': require('@/assets/fonts/Fredoka-Bold.ttf'),
   });
 
-  // Hold the splash until fonts load and the Nova stores read back from
-  // AsyncStorage, so the app never flashes system fonts or seeded data before
-  // swapping to what was saved.
-  const familyHydrated = useFamilyStore((state) => state.hasHydrated);
-  const tasksHydrated = useTasksStore((state) => state.hasHydrated);
-  const alarmsHydrated = useAlarmsStore((state) => state.hasHydrated);
-  const ready = fontsLoaded && familyHydrated && tasksHydrated && alarmsHydrated;
-
+  // Hold the splash until the fonts load, so the app never flashes system fonts.
   useEffect(() => {
-    if (ready) SplashScreen.hideAsync();
-  }, [ready]);
+    if (fontsLoaded) SplashScreen.hideAsync();
+  }, [fontsLoaded]);
 
-  if (!ready) return null;
+  if (!fontsLoaded) return null;
 
   return (
     <QueryClientProvider client={queryClient}>

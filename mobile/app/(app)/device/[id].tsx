@@ -8,9 +8,9 @@ import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
-import { useFamilyStore, useSpeaker } from '@/hooks/useFamily';
+import { useCan } from '@/hooks/useAuth';
+import { useHubFamily } from '@/hooks/useHub';
 import { BLOCK_CATEGORIES, useNetworkStore } from '@/hooks/useNetwork';
-import { can } from '@/lib/family-permissions';
 import { cn } from '@/lib/utils';
 import { relativeTime } from '@/lib/time';
 import type { DeviceKind } from '@/types';
@@ -34,9 +34,10 @@ export default function DeviceScreen() {
   const setPaused = useNetworkStore((state) => state.setPaused);
   const claimDevice = useNetworkStore((state) => state.claimDevice);
 
-  const members = useFamilyStore((state) => state.members);
-  const speaker = useSpeaker();
-  const canManage = can(speaker.role, 'network');
+  const { data: people = [] } = useHubFamily();
+  const can = useCan();
+  // The internet rules are a parent thing, same as setting someone else's alarm.
+  const canManage = can('alarms.family');
 
   const device = devices.find((item) => item.id === id);
 
@@ -52,7 +53,7 @@ export default function DeviceScreen() {
     );
   }
 
-  const owner = members.find((member) => member.id === device.ownerId);
+  const owner = device.ownerId;
 
   const guard = (run: () => void) => {
     if (!canManage) {
@@ -72,7 +73,7 @@ export default function DeviceScreen() {
             <Icon as={DEVICE_ICONS[device.kind]} weight="fill" size={28} className="text-primary-soft-foreground" />
           </View>
           <Text variant="h3">{device.name}</Text>
-          <Text variant="muted">{owner ? `${owner.name}'s device` : 'Nobody has claimed this device yet.'}</Text>
+          <Text variant="muted">{owner ? `${owner}'s device` : 'Nobody has claimed this device yet.'}</Text>
           <View className="w-full flex-row justify-between px-10">
             <Text variant="small" className={device.paused ? 'text-destructive' : 'text-success'}>{device.paused ? 'Paused' : 'Allowed'}</Text>
             <Text variant="small" className="text-muted-foreground">{device.blocked.length} groups blocked</Text>
@@ -125,9 +126,9 @@ export default function DeviceScreen() {
                 Claiming a device applies that person's usual rules to it and stops it being flagged as unknown.
               </Text>
               <View className="flex-row flex-wrap gap-2">
-                {members.filter((member) => member.role !== 'guest').map((member) => (
-                  <Button key={member.id} variant="secondary" size="sm" onPress={() => guard(() => claimDevice(device.id, member.id))}>
-                    <Text>{member.name}</Text>
+                {people.map((person) => (
+                  <Button key={person.id} variant="secondary" size="sm" onPress={() => guard(() => claimDevice(device.id, person.name))}>
+                    <Text>{person.name}</Text>
                   </Button>
                 ))}
               </View>

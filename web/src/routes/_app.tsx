@@ -35,10 +35,13 @@ function AppLayout() {
   if (!user) return <Navigate to="/login" />;
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <nav className="mx-auto flex h-14 max-w-5xl items-center gap-6 px-4">
-          <span className="font-semibold">Hackathon</span>
+    <div className="min-h-screen">
+      <header className="sticky top-0 z-40 px-4 pt-4">
+        <nav className="glass mx-auto flex h-14 max-w-5xl items-center gap-1 rounded-2xl px-3 shadow-soft ring-1 ring-foreground/10">
+          <span className="mr-3 flex items-center gap-2 pl-1 font-heading font-semibold tracking-tight">
+            <span className="size-2 rounded-full bg-primary shadow-[0_0_12px_2px_var(--primary)]" />
+            Hackathon
+          </span>
           {nav
             .filter((n) => !('permission' in n) || can(n.permission))
             .map((n) => (
@@ -46,14 +49,14 @@ function AppLayout() {
                 key={n.to}
                 to={n.to}
                 activeOptions={{ exact: n.to === '/' }}
-                className="text-sm text-muted-foreground hover:text-foreground [&.active]:font-medium [&.active]:text-foreground"
+                className="rounded-lg px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground [&.active]:bg-accent [&.active]:font-medium [&.active]:text-accent-foreground"
               >
                 {n.label}
               </Link>
             ))}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="ml-auto">
+              <Button variant="ghost" size="sm" className="ml-auto rounded-lg">
                 {user.name}
               </Button>
             </DropdownMenuTrigger>
@@ -70,7 +73,7 @@ function AppLayout() {
           </DropdownMenu>
         </nav>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-8">
+      <main className="mx-auto max-w-5xl px-4 py-10">
         <Outlet />
       </main>
     </div>
