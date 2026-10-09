@@ -25,7 +25,7 @@ const ASSIGNEE = { assignee: { select: { name: true } } } as const;
 const withName = ({ assignee, ...task }: Task & { assignee: { name: string } }) => ({ ...task, assigneeName: assignee.name });
 
 // Owner: Hub dev. #12
-// Chore photos are NOT here: POST /api/chores/:taskId/photo (Brain dev, chores.controller.ts).
+// Chores have no photos: the kid checks a chore off like any task (PATCH below) and the parents see it done.
 @Controller('tasks')
 export class TasksController {
   constructor(private prisma: PrismaService) {}
