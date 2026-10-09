@@ -49,9 +49,21 @@ def _name(user_id: int) -> str:
     return _names.get(user_id, str(user_id))
 
 
+def trim(audio: np.ndarray) -> np.ndarray:
+    """Cut leading/trailing silence (30 ms frames, ~0.3 s padding kept). Enroll and identify must both use it."""
+    f = int(0.03 * config.SAMPLE_RATE)
+    if len(audio) < f:
+        return audio
+    rms = np.sqrt(np.mean(audio[: len(audio) // f * f].reshape(-1, f) ** 2, axis=1))
+    loud = np.where(rms > max(0.01, rms.max() * 0.1))[0]
+    if not len(loud):
+        return audio
+    return audio[max(0, loud[0] - 10) * f : (loud[-1] + 10) * f]
+
+
 def scores(audio: np.ndarray) -> dict[int, float]:
-    """Cosine score against every saved profile."""
-    v = embed(audio)
+    """Cosine score against every saved profile. Under ~1 s of speech scores low: expect guest."""
+    v = embed(trim(audio))
     out = {}
     for f in config.PROFILES_DIR.glob('*.npy'):
         p = np.load(f)
