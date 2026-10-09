@@ -1,4 +1,4 @@
-# OWNER: voice-ears. Speech-to-text: local faster-whisper (multilingual small); ElevenLabs Scribe first only if ELEVENLABS_STT=true.
+# OWNER: voice-ears. Speech-to-text: ElevenLabs Scribe first (ELEVENLABS_STT=true), local faster-whisper (multilingual small) as fallback.
 import io
 import threading
 
