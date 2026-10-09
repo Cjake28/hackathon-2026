@@ -1,11 +1,11 @@
 # Family Hub ("Jarvis"): Team Plan
 
-24-hour hackathon. 3 devs + 1 UI. Everyone builds alone against **one contract** (this file) and you connect at the end.
+**6-hour hackathon.** 3 devs + 1 UI. Everyone builds alone against **one contract** (this file) and you connect at the end.
 
-**How there are no blockers:** in the first 90 minutes (H0) one commit adds every table, role, endpoint and AI tool as a
+**How there are no blockers:** at kickoff (H0, done) one commit adds every table, role, endpoint and AI tool as a
 **stub that returns fake data in the final shape**. After that commit:
 
-- the UI hits real URLs from hour 2 (no mock JSON needed),
+- the UI hits real URLs from the start (no mock JSON needed),
 - every dev owns their own files, so merges don't conflict,
 - anything that talks to another part (`speak()`, `notify()`) is fire-and-forget, so it works even when that part isn't running.
 
@@ -37,8 +37,11 @@ Judges see 3–5 minutes. Build in this order and cut from the bottom.
 |---|---|---|
 | **P0** (no demo without it) | #2 voice (push-to-talk first), #3 voice ID, #6 roles, #7 guest, #25 alarm, #28 parent sets kid's alarm, #12 task relay + device page, #13 + #4 chore photo check | Every demo moment below uses these |
 | **P1** | wake word "hey jarvis", #29 reminders (free: an alarm with `kind: "reminder"`), #58 grocery (free: Items), #30 morning briefing, #9 memory, #50 who's home | Cheap once P0 works |
-| **P2** (only if on time at H14) | calendar page, budget page, arrival announcement that reads out chores | Seed calendar data anyway so the briefing sounds good |
+| **P2** (only if on time at 4:00) | calendar page, budget page, arrival announcement that reads out chores | Seed calendar data anyway so the briefing sounds good |
 | **Freebie** | #5 Tagalog/Taglish | Use the multilingual Whisper model + "reply in the user's language" and it mostly works |
+
+**6 hours means:** push-to-talk first (wake word only if the chain works by 4:00), voice ID for 2–3 people, and no
+calendar/budget pages (they already work by voice through the Brain tools).
 
 ### The 4-minute demo (everything is built for this)
 
@@ -60,11 +63,11 @@ Judges see 3–5 minutes. Build in this order and cut from the bottom.
 | **Hub dev** (TS) | Database, roles, alarms + scheduler, tasks, device poll, who's home, calendar/budget (P2) | #6 #7(roles) #25 #28 #29 #12 #50 #58(data) | `curl` / Postman |
 | **Brain dev** (TS) | Voice command endpoint, AI tools, Jarvis prompt, memory, briefing, chore vision | #1 #9 #30 #4 #13, the AI side of everything | `curl` with typed text + a speaker id |
 | **Voice dev** (Python) | Mic, wake word, speech-to-text, voice ID, text-to-speech, the hub laptop's audio setup | #2 #3 #7(detect unknown voice) | Console prints `[Mom 0.91] set an alarm...` |
-| **UI dev** | Every screen in `web/` | Device page (#34), dashboard, all pages | Real stub endpoints from H2 |
+| **UI dev** | Every screen in `web/` | Device page (#34), dashboard, all pages | Real stub endpoints from the start |
 
 **Hub laptop = the Brain dev's laptop** (RTX 3050 4 GB, 16 GB RAM, i5-12450H). It runs `qwen3.5:4b`, which has vision ✓ and tools ✓.
 The Brain dev builds on it. The Voice dev develops on their own laptop with `--mock` and moves the mic setup to the hub
-laptop at H8. Demo day runs entirely on this laptop.
+laptop at the 2:30 merge. Demo day runs entirely on this laptop.
 
 ### File ownership. Never edit a file you don't own; ask the owner in the group chat.
 
@@ -72,11 +75,11 @@ laptop at H8. Demo day runs entirely on this laptop.
 |---|---|
 | `api/prisma/schema.prisma`, `api/prisma/seed.ts`, `api/src/auth/permissions.ts`, `api/src/app.module.ts`, `api/src/family.ts` | **Hub** (locked after H0: changes get announced first) |
 | `api/src/alarms/`, `api/src/tasks/`, `api/src/device/`, `api/src/calendar/`, `api/src/budget/`, `api/src/scheduler.service.ts` | **Hub** |
-| `api/src/ai/` (incl. `tools.ts`), `api/src/voice/`, `api/src/chores/`, `api/src/memory/`, `api/src/briefing/` | **Brain** |
+| `api/src/ai/` (incl. `tools.ts`), `api/src/voice/`, `api/src/chores/`, `api/src/memory/`, `api/src/briefing/`, `api/src/location/`, `web/src/routes/_app/map.tsx` | **Brain** |
 | `voice/` | **Voice** |
 | `web/` (and `mobile/` if you use it, but web-only is recommended: phones open the hub URL) | **UI** |
 
-Git: after the H0 commit everyone branches (`hub`, `brain`, `voice`, `ui`) and merges to `main` at H8, H14, H18.
+Git: after the H0 commit everyone branches (`hub`, `brain`, `voice`, `ui`) and merges to `main` at 2:30, 4:00 and 5:00.
 Because files are owned, these merges should be clean.
 
 **If you build with Claude/Copilot:** tell it "Read TEAM-PLAN.md. The contract (names, routes, JSON shapes) is fixed. Only edit files I own."
@@ -399,7 +402,7 @@ User ids after a fresh seed: Admin 1, Mom 2, Dad 3, Ana 4, Ben 5, Guest 6.
 **Done alone when:** a curl script creates an alarm with `inMinutes: 1` for Ana, and within ~70 s Ana's `/device/poll`
 returns it in `ringing` plus an `alarm:ring` notice.
 
-### Brain dev
+### Brain dev: DONE on the `brain` branch (merges at 2:30), now building location (section 9)
 
 1. **`/voice/text` first** (needs no voice and no hub key). Copy `agentReply()` from `conversations.controller.ts`
    (duplication is fine). The system prompt adds: Jarvis personality, **reply in 1–2 short sentences, no Markdown (it's
@@ -425,7 +428,7 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
 
 ### Voice dev
 
-1. **Spike first (H0–H3) on the hub laptop:** get each library printing results. If one won't install on Windows within
+1. **Spike first (first 45 minutes):** get each library printing results. If one won't install on Windows within
    30 min, switch to the fallback.
    - Mic: `sounddevice`, 16 kHz mono
    - Speech-to-text: `faster-whisper`, **multilingual** `small` (or `base` if slow), int8 on CPU. This makes Tagalog nearly free.
@@ -474,15 +477,14 @@ the last hours to connect lose the demo.
 | When | What |
 |---|---|
 | **Before the event** (needs internet) | Pick the hub laptop (best GPU/RAM). `ollama pull` a chat model that shows **vision ✓ tools ✓** on AI Settings (`npm run ai:bench` to compare). Voice dev installs Python deps and downloads every model **on the hub laptop**. `npm run setup`, Docker image pulled. Bring a headset/USB mic, a speaker and a phone for hotspot |
-| H0–H1.5 | Contract commit (section 5) |
-| H1.5–H8 | Build alone. Each dev reaches their "done alone when" |
-| **H8 merge (30 min)** | Typed chain: `/voice/text` as Mom → alarm → Ana's device page rings. No voice yet |
-| H8–H14 | Real logic everywhere. Voice dev connects to `/voice/command` on the hub laptop |
-| **H14 merge (30 min)** | Full voice chain on the hub laptop. Decide P2 cuts now |
-| H14–H18 | P1/P2, chore vision tuning, demo seed data |
-| **H18: FEATURE FREEZE** | Bugs only, on the real hub laptop + real phones + hotspot |
-| H20–H22 | Rehearse the demo 3 times, record a backup video, `npm run backup` |
-| H22–H24 | Buffer, pitch slides (P2 and second-tier features go on the roadmap slide) |
+| 0:00–0:30 | Setup commit (done) |
+| 0:30–2:30 | Build alone. Each dev reaches their "done alone when" |
+| **2:30 merge (20 min)** | Typed chain: `/voice/text` as Mom → alarm → Ana's device page rings. No voice yet |
+| 2:50–4:00 | Real logic everywhere. Voice dev connects to `/voice/command` on the hub laptop |
+| **4:00 merge (20 min)** | Full voice chain on the hub laptop. Cut whatever isn't working |
+| 4:20–5:00 | P1 polish, demo seed data, online extras only if the core works |
+| **5:00: FEATURE FREEZE** | Rehearse the demo 3 times on the hub laptop + real phones, record a backup video, `npm run backup` |
+| 5:30–6:00 | Pitch (second/third-tier features go on the roadmap slide) |
 
 ---
 
@@ -504,5 +506,36 @@ the last hours to connect lose the demo.
 
 - Audio is transcribed in memory and never saved. Voice profiles stay in `voice/profiles/` on the hub.
 - Chore photos and memory notes stay in the hub's Postgres.
-- No cloud APIs, CDNs or remote fonts (see `CLAUDE.md`). Only small results would ever go online (third-tier features).
+- No cloud APIs, CDNs or remote fonts (see `CLAUDE.md`), except the online extras in section 9. They only get small results
+  (reply text, map tiles, location through the tunnel) and the hub keeps working when they're offline.
 - Guests never get family data: the `guest` role has only `ai.use`, and permissions are checked in the API, never in the AI prompt.
+
+## 9. Online extras (only after the core works; the hub must still work with the internet off)
+
+### ElevenLabs voice (#5 Filipino). Voice dev, after the 4:00 merge
+
+Only text-to-speech goes online. Speech-to-text stays local (Whisper), so recordings never leave the house.
+`ELEVENLABS_API_KEY` goes in `voice/.env`. Inside `/speak`:
+
+```
+text → spoken before?            → play the saved audio file (instant, no credits)
+     → online + key + credits?   → ElevenLabs (fast multilingual model), wait max 2 s
+                                      ok        → play it + save it for next time
+                                      slow/fail → local voice
+     → offline                   → local voice (Kokoro, pyttsx3 as backup)
+after speaking → unmute the mic
+```
+
+One voice for everything when online (English and Filipino), so Jarvis doesn't sound like two people.
+Demo line: pull the internet and Jarvis keeps talking with the local voice.
+
+### Location (#51 "Where is Ana?", #52 safe zones). Brain dev
+
+- The phone shares GPS from the web app's **Map** page. Phone browsers only share GPS over HTTPS, so the phone opens the
+  hub through a Cloudflare quick tunnel: `cloudflared tunnel --url http://localhost:4101` (hub mode) prints an
+  `https://….trycloudflare.com` address. That also works when the phone is away from home.
+- The hub stores each person's last location and checks it against **places** (home, school, Lola's, with a radius).
+  Arriving at a place → `presence:arrived` notice + the hub says "Ana arrived at School".
+- Jarvis: "Where is Ana?" → `where_is` tool (parents only: `location.read`).
+- Map: Leaflet + OpenStreetMap tiles (free, no key). Locations stay on the hub; OpenStreetMap only serves map pictures.
+- Demo: everyone is in the same room, so make a place called "School" around the venue with "Add place here".
