@@ -1,8 +1,7 @@
 import {
-  BadRequestException,
   Body,
-  ConflictException,
   Controller,
+  ForbiddenException,
   Get,
   Post,
   Res,
@@ -10,14 +9,13 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Role, User } from '@prisma/client';
-import { compare, hash } from 'bcryptjs';
+import { compare } from 'bcryptjs';
 import type { FastifyReply } from 'fastify';
 import { PrismaService } from '../prisma.service';
 import { CurrentUser, Public } from './auth.decorators';
 import { toAuthUser, type AuthUser } from './auth.guard';
-import { roleForNewUser } from './permissions';
 
 const SESSION_DAYS = 7; // keep in sync with JwtModule expiresIn in app.module.ts
 
@@ -39,31 +37,11 @@ export class AuthController {
     return user;
   }
 
+  // No sign-up: Mom or Dad (users.manage) makes every account with POST /api/users and picks its role.
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('register')
-  async register(
-    @Body() body: { name: string; email: string; password: string },
-    @Res({ passthrough: true }) reply: Reply,
-  ) {
-    const email = normalizeEmail(body.email);
-    const name = body.name?.trim();
-    if (!email || !name || (body.password?.length ?? 0) < 8) {
-      throw new BadRequestException('Name, email and a password of at least 8 characters are required');
-    }
-    if (await this.prisma.user.findUnique({ where: { email } })) {
-      throw new ConflictException('Email is already registered');
-    }
-    const user = await this.prisma.user.create({
-      data: {
-        email,
-        name,
-        password: await hash(body.password, 10),
-        role: { connect: { name: roleForNewUser(email) } },
-      },
-      include: { role: true },
-    });
-    return this.startSession(reply, user);
+  register() {
+    throw new ForbiddenException('Ask Mom or Dad to make your account.');
   }
 
   @Public()

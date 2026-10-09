@@ -20,6 +20,7 @@ async function main() {
         ...ITEMS, 'ai.use', 'alarms.own', 'alarms.family', 'tasks.own', 'tasks.assign',
         'calendar.use', 'budget.use', 'presence.read', 'memory.own', 'location.share', 'location.read',
         'intercom.send',
+        'users.manage', 'roles.manage', // Mom and Dad are the admins: they make every account and role (no sign-up)
       ],
     },
     {

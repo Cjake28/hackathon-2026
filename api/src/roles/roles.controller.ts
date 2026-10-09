@@ -1,5 +1,7 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post } from '@nestjs/common';
-import { Can } from '../auth/auth.decorators';
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post } from '@nestjs/common';
+import { Can, CurrentUser } from '../auth/auth.decorators';
+import type { AuthUser } from '../auth/auth.guard';
+import { PERMISSIONS } from '../auth/permissions';
 import { PrismaService } from '../prisma.service';
 
 type RoleInput = { name: string; permissions?: string[] };
@@ -17,21 +19,30 @@ export class RolesController {
     });
   }
 
+  // Every permission there is, for the role editor's checkboxes (so the apps don't keep their own copy).
+  @Get('permissions')
+  permissions() {
+    return PERMISSIONS;
+  }
+
   @Can('roles.manage')
   @Post()
   create(@Body() data: RoleInput) {
     return this.prisma.role.create({ data: { name: data.name, permissions: data.permissions ?? [] } });
   }
 
+  // You can't change or delete your own role: you could lock yourself out of this page.
   @Can('roles.manage')
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() data: Partial<RoleInput>) {
-    return this.prisma.role.update({ where: { id }, data });
+  update(@CurrentUser() me: AuthUser, @Param('id', ParseIntPipe) id: number, @Body() data: Partial<RoleInput>) {
+    if (id === me.roleId) throw new BadRequestException("You can't change your own role");
+    return this.prisma.role.update({ where: { id }, data: { name: data.name, permissions: data.permissions } });
   }
 
   @Can('roles.manage')
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
+  remove(@CurrentUser() me: AuthUser, @Param('id', ParseIntPipe) id: number) {
+    if (id === me.roleId) throw new BadRequestException("You can't delete your own role");
     return this.prisma.role.delete({ where: { id } });
   }
 }
