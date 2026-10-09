@@ -31,8 +31,8 @@ const SYSTEM =
   'If something is clearly not done, say exactly what you see that is left (e.g. "two cups are still in the sink"). ' +
   'Talk to the kid in one short, friendly sentence.';
 
-// Owner: Brain dev. #13 #4: the assignee sends a before photo, then an after photo; the AI compares them with the
-// chore's checklist and says done or redo with specific feedback. The parent gets a task:reviewed notice.
+// Owner: Brain dev. #13 #4: the assignee sends a before photo, then an after photo; the AI checks the after photo
+// against the chore's checklist and says done or redo with specific feedback. The parent gets a task:reviewed notice.
 @Controller('chores')
 @Can('tasks.own')
 export class ChoresController {
@@ -60,12 +60,11 @@ export class ChoresController {
       return { ...saved, assigneeName: task.assignee.name };
     }
 
+    // Only the after photo goes to the AI: comparing two photos is what small vision models do worst, and two images
+    // double the wait. The before photo stays on the task for the parent's view.
     const checklist = task.checklist.length ? task.checklist.join('; ') : 'the chore is clearly finished';
-    const prompt = task.beforePhoto
-      ? `Chore: "${task.title}". Done means: ${checklist}.\nPicture 1 is BEFORE, picture 2 is AFTER. Is the chore done in the AFTER picture?`
-      : `Chore: "${task.title}". Done means: ${checklist}.\nThis picture was taken AFTER doing the chore. Is the chore done?`;
-    const images = task.beforePhoto ? [task.beforePhoto, image] : [image];
-    const verdict = await this.ai.json(prompt, Verdict, SYSTEM, images);
+    const prompt = `Chore: "${task.title}". Done means: ${checklist}.\nThis photo was taken after doing the chore. Is the chore done?`;
+    const verdict = await this.ai.json(prompt, Verdict, SYSTEM, [image]);
 
     const saved = await this.prisma.task.update({
       where: { id: taskId },
