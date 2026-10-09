@@ -18,13 +18,14 @@ async function main() {
       name: 'parent',
       permissions: [
         ...ITEMS, 'ai.use', 'alarms.own', 'alarms.family', 'tasks.own', 'tasks.assign',
-        'calendar.use', 'budget.use', 'presence.read', 'memory.own',
+        'calendar.use', 'budget.use', 'presence.read', 'memory.own', 'location.share', 'location.read',
       ],
     },
     {
       name: 'child',
       permissions: [
         'items.read', 'items.create', 'ai.use', 'alarms.own', 'tasks.own', 'calendar.use', 'presence.read', 'memory.own',
+        'location.share',
       ],
     },
     { name: 'guest', permissions: ['ai.use'] }, // every unknown voice speaks as the Guest user
@@ -78,6 +79,7 @@ async function main() {
     prisma.notice.deleteMany(),
     prisma.event.deleteMany(),
     prisma.expense.deleteMany(),
+    prisma.location.deleteMany(),
   ]);
 
   // Grocery list (the Item table)
@@ -151,6 +153,17 @@ async function main() {
     update: {},
     create: { key: 'budget.monthly', value: '20000' },
   });
+
+  // Places (#52). Placeholders around Manila: on demo day use "Add place here" on the Map page at the venue.
+  if (!(await prisma.place.count())) {
+    await prisma.place.createMany({
+      data: [
+        { name: 'Home', lat: 14.5995, lng: 120.9842, radiusM: 150 },
+        { name: 'School', lat: 14.6091, lng: 120.9890, radiusM: 250 },
+        { name: "Lola's house", lat: 14.5794, lng: 121.0359, radiusM: 150 },
+      ],
+    });
+  }
 
   console.log('Seeded');
 }

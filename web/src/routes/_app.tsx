@@ -18,6 +18,7 @@ export const Route = createFileRoute('/_app')({ component: AppLayout });
 const nav = [
   { to: '/', label: 'Home' },
   { to: '/items', label: 'Items', permission: 'items.read' },
+  { to: '/map', label: 'Map', permission: 'location.share' },
   { to: '/ai', label: 'AI Chat', permission: 'ai.use' },
   { to: '/docs', label: 'Docs', permission: 'ai.use' },
   { to: '/users', label: 'Users', permission: 'users.manage' },

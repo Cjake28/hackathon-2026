@@ -164,3 +164,23 @@ model Expense {
   addedById Int
   spentAt   DateTime @default(now())
 }
+
+// #51 #52 location (TEAM-PLAN.md section 9, Brain dev): each person's last GPS fix, one row per person.
+model Location {
+  userId    Int      @id
+  lat       Float
+  lng       Float
+  accuracy  Float? // meters
+  placeId   Int? // the saved place they are at now (null = somewhere else)
+  since     DateTime @default(now()) // when placeId last changed
+  updatedAt DateTime @updatedAt
+}
+
+// Safe zones: home, school, Lola's. Arriving → presence:arrived notice to the parents + the hub says it.
+model Place {
+  id      Int    @id @default(autoincrement())
+  name    String
+  lat     Float
+  lng     Float
+  radiusM Int    @default(150)
+}

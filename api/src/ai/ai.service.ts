@@ -86,9 +86,10 @@ export class AiService implements OnApplicationBootstrap {
   }
 
   // JSON that matches a zod schema: `await ai.json(prompt, z.object({ ... }))` returns typed data.
-  async json<T extends z.ZodType>(prompt: string, schema: T, system?: string): Promise<z.infer<T>> {
+  // `images`: base64 pictures for vision models (e.g. chore before/after photos).
+  async json<T extends z.ZodType>(prompt: string, schema: T, system?: string, images?: string[]): Promise<z.infer<T>> {
     const { $schema, ...format } = z.toJSONSchema(schema) as Record<string, unknown>;
-    const res = await this.chatOnce(withSystem([{ role: 'user', content: prompt }], system), format);
+    const res = await this.chatOnce(withSystem([{ role: 'user', content: prompt, images }], system), format);
     const parsed = schema.safeParse(parseJson(res.message.content));
     if (!parsed.success) throw new BadGatewayException('The AI returned an unexpected answer. Try again.');
     return parsed.data;
