@@ -9,6 +9,15 @@ export const PERMISSIONS = [
   'ai.use', // AI chat, AI features, asking the documents
   'docs.manage', // upload/delete RAG documents
   'ai.manage', // pick the hub's AI model (web AI Settings page)
+  // Family hub (TEAM-PLAN.md 4.2)
+  'alarms.own', // set/see/dismiss your own alarms and reminders
+  'alarms.family', // set alarms/reminders for others (#28)
+  'tasks.own', // see your tasks, send chore photos
+  'tasks.assign', // give tasks to others, see everyone's
+  'calendar.use',
+  'budget.use',
+  'presence.read', // who's home (never for guests)
+  'memory.own', // Jarvis remembers things about you
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

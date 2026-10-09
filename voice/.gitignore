@@ -1,0 +1,6 @@
+.env
+.venv/
+__pycache__/
+# Privacy: voice profiles and downloaded models stay on the hub, never in git
+profiles/
+models/

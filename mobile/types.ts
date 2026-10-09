@@ -11,6 +11,14 @@ export const PERMISSIONS = [
   'ai.use',
   'docs.manage',
   'ai.manage',
+  'alarms.own',
+  'alarms.family',
+  'tasks.own',
+  'tasks.assign',
+  'calendar.use',
+  'budget.use',
+  'presence.read',
+  'memory.own',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

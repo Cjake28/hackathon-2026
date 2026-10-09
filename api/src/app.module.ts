@@ -4,16 +4,25 @@ import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AiController } from './ai/ai.controller';
 import { AiService } from './ai/ai.service';
+import { AlarmsController } from './alarms/alarms.controller';
 import { AuthController } from './auth/auth.controller';
 import { AuthGuard } from './auth/auth.guard';
+import { BriefingController } from './briefing/briefing.controller';
+import { ExpensesController } from './budget/expenses.controller';
+import { EventsController } from './calendar/events.controller';
+import { ChoresController } from './chores/chores.controller';
 import { ConversationsController } from './conversations/conversations.controller';
+import { DeviceController } from './device/device.controller';
 import { HubController } from './hub.controller';
 import { ItemsController } from './items/items.controller';
+import { MemoryController } from './memory/memory.controller';
 import { PrismaService } from './prisma.service';
 import { RagController } from './rag/rag.controller';
 import { RagService } from './rag/rag.service';
 import { RolesController } from './roles/roles.controller';
+import { TasksController } from './tasks/tasks.controller';
 import { UsersController } from './users/users.controller';
+import { VoiceController } from './voice/voice.controller';
 
 @Module({
   imports: [
@@ -34,6 +43,17 @@ import { UsersController } from './users/users.controller';
     RagController,
     RolesController,
     UsersController,
+    // Family hub (TEAM-PLAN.md). Hub dev:
+    AlarmsController,
+    DeviceController,
+    EventsController,
+    ExpensesController,
+    TasksController,
+    // Brain dev:
+    BriefingController,
+    ChoresController,
+    MemoryController,
+    VoiceController,
   ],
   // and every new service here
   providers: [

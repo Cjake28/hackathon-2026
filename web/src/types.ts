@@ -11,6 +11,14 @@ export const PERMISSIONS = [
   'ai.use',
   'docs.manage',
   'ai.manage',
+  'alarms.own',
+  'alarms.family',
+  'tasks.own',
+  'tasks.assign',
+  'calendar.use',
+  'budget.use',
+  'presence.read',
+  'memory.own',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -93,3 +101,63 @@ export type ConversationMessage = {
 };
 
 export type ConversationWithMessages = Conversation & { messages: ConversationMessage[] };
+
+// ---- Family hub (contract: TEAM-PLAN.md 4.4). Don't rename fields: the API returns exactly these. ----
+
+export type FamilyRole = 'admin' | 'parent' | 'child' | 'guest';
+
+export type Person = { id: number; name: string; role: FamilyRole; isHome: boolean; lastSeenAt: string | null };
+
+export type Alarm = {
+  id: number;
+  userId: number;
+  createdById: number;
+  kind: 'alarm' | 'reminder';
+  label: string;
+  time: string; // "06:30"
+  repeat: 'once' | 'daily' | 'weekdays';
+  nextAt: string;
+  enabled: boolean;
+  ringingAt: string | null;
+};
+
+export type Task = {
+  id: number;
+  title: string;
+  assigneeId: number;
+  assigneeName: string;
+  createdById: number;
+  isChore: boolean;
+  checklist: string[];
+  dueAt: string | null;
+  status: 'pending' | 'redo' | 'done';
+  beforePhoto: string | null; // base64 JPEG
+  afterPhoto: string | null;
+  feedback: string | null; // the AI's chore feedback
+  createdAt: string;
+  doneAt: string | null;
+};
+
+export type NoticeKind =
+  | 'alarm:ring'
+  | 'task:new'
+  | 'task:reviewed'
+  | 'presence:arrived'
+  | 'presence:left'
+  | 'voice:heard' // data: { speaker: string, confidence: number, reply: string }
+  | 'intercom';
+
+export type Notice = { id: number; toUserId: number | null; kind: NoticeKind; text: string; data: any; createdAt: string };
+
+// GET /api/device/poll?after=<cursor>, every 3 s. Send the returned cursor back as `after`.
+export type Poll = { cursor: number; notices: Notice[]; ringing: Alarm[]; home: Person[] };
+
+export type VoiceReply = { reply: string; speaker: { id: number; name: string; role: FamilyRole }; pending: boolean };
+
+export type MemoryNote = { id: number; userId: number; text: string; createdAt: string };
+
+export type FamilyEvent = { id: number; title: string; startsAt: string; userId: number | null; createdById: number };
+
+export type Expense = { id: number; amount: number; category: string; note: string; addedById: number; spentAt: string };
+
+export type BudgetSummary = { month: string; total: number; limit: number | null; byCategory: Record<string, number> };

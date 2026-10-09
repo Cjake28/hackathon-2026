@@ -349,15 +349,33 @@ changes are `confirm: true`.
 
 ## 5. Task lists
 
-### H0: Contract commit (everyone together, 90 min, Hub dev types)
+### H0: Contract commit: DONE, already on `main`
 
-- [ ] Add the schema from 4.1 → `npm run db:push`
-- [ ] Permissions (4.2) in `permissions.ts` + `web/src/types.ts`; roles, family and demo data in `seed.ts` → `npm run db:seed`
-- [ ] `api/src/family.ts` exactly as 4.3
-- [ ] Every controller in 4.5 created and registered in `app.module.ts`, each method returning **hardcoded fake data in the final shape**
-- [ ] Every tool in 4.6 added to `tools.ts` with a stub `run()` that returns a fake result
-- [ ] `HUB_KEY` / `VOICE_URL` in `api/.env`; `voice/` folder with a README
-- [ ] `npm run typecheck` passes → commit to `main` → everyone pulls and branches
+- [x] Schema from 4.1
+- [x] Permissions (4.2) in `permissions.ts` + `web/src/types.ts` + `mobile/types.ts`; roles, demo family and demo data in `seed.ts`
+- [x] `api/src/family.ts` exactly as 4.3; the JSON shapes (4.4) in `web/src/types.ts`
+- [x] Every controller in 4.5 registered in `app.module.ts`, returning fake data in the final shape (`api/src/fake.ts`)
+- [x] Every tool in 4.6 in `tools.ts` with a stub `run()`; item tools reworded to "grocery list"
+- [x] `HUB_KEY` / `VOICE_URL` in `api/.env.example` (`npm run setup` adds them); `voice/` folder with README + `.env.example`
+- [x] `npm run typecheck` passes; every endpoint smoke-tested with curl
+
+Already real: permission checks (`@Can`), the hub-key check and speaker lookup in `/voice/command`, and `/voice/people`.
+Everything else returns fake data. When your endpoint is real, stop importing from `fake.ts`.
+
+**Start here (everyone):**
+
+```
+git pull
+npm run setup        # adds HUB_KEY + VOICE_URL to your api/.env
+npm run db:up
+npm run db:push
+npm run db:seed      # family logins below (resets the demo data)
+git checkout -b <hub|brain|voice|ui>
+```
+
+Logins (password `family123`): `mom@family.local` and `dad@family.local` (parent), `ana@family.local` and
+`ben@family.local` (child), `guest@family.local` (guest). Admin: `admin@example.com` / `admin12345`.
+User ids after a fresh seed: Admin 1, Mom 2, Dad 3, Ana 4, Ben 5, Guest 6.
 
 ### Hub dev
 

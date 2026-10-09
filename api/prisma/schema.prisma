@@ -16,6 +16,11 @@ model User {
   role          Role           @relation(fields: [roleId], references: [id])
   createdAt     DateTime       @default(now())
   conversations Conversation[]
+  lastSeenAt    DateTime? // presence: updated by GET /api/device/poll
+  lastIp        String?
+  alarms        Alarm[]
+  tasks         Task[]
+  memories      MemoryNote[]
 }
 
 // AI chat history, saved per user.
@@ -77,9 +82,85 @@ model Setting {
   value String
 }
 
+// The family grocery list (#58). The boilerplate's to-do example, reused.
 model Item {
   id        Int      @id @default(autoincrement())
   name      String
   done      Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+// ---- Family hub (contract: TEAM-PLAN.md section 4.1) ----
+
+// #25 #28 #29: alarms AND reminders (a reminder is an alarm with kind "reminder")
+model Alarm {
+  id          Int       @id @default(autoincrement())
+  userId      Int // who it rings for
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdById Int // a parent, or the user themself
+  kind        String    @default("alarm") // "alarm" | "reminder"
+  label       String    @default("Alarm") // "Wake up", "Take medicine", "Leave for school"
+  time        String // "06:30", 24h, hub local time
+  repeat      String    @default("once") // "once" | "daily" | "weekdays"
+  nextAt      DateTime // next ring; the scheduler moves it forward
+  enabled     Boolean   @default(true)
+  ringingAt   DateTime? // set while ringing, cleared on dismiss/snooze
+  createdAt   DateTime  @default(now())
+}
+
+// #12 #13: tasks from a parent; chores are checked by photo
+model Task {
+  id          Int       @id @default(autoincrement())
+  title       String
+  assigneeId  Int
+  assignee    User      @relation(fields: [assigneeId], references: [id], onDelete: Cascade)
+  createdById Int
+  isChore     Boolean   @default(false) // chores need before/after photos
+  checklist   String[] // what "done" looks like: ["sink is empty", "dishes are in the rack"]
+  dueAt       DateTime?
+  status      String    @default("pending") // "pending" | "redo" | "done"
+  beforePhoto String? // base64 JPEG
+  afterPhoto  String?
+  feedback    String? // the AI's specific feedback
+  createdAt   DateTime  @default(now())
+  doneAt      DateTime?
+}
+
+// #9: what Jarvis remembers about each person (stays on the hub)
+model MemoryNote {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text      String // "likes adobo", "allergic to shrimp", "piano every Saturday"
+  createdAt DateTime @default(now())
+}
+
+// "Push" without WebSockets: devices poll GET /api/device/poll every 3 s and receive new rows.
+model Notice {
+  id        Int      @id @default(autoincrement())
+  toUserId  Int? // null = every device
+  kind      String // NoticeKind in api/src/family.ts
+  text      String // what to show
+  data      Json? // e.g. { "taskId": 7 } or { "alarmId": 3 }
+  createdAt DateTime @default(now())
+}
+
+// #58 calendar
+model Event {
+  id          Int      @id @default(autoincrement())
+  title       String
+  startsAt    DateTime
+  userId      Int? // null = whole family
+  createdById Int
+  createdAt   DateTime @default(now())
+}
+
+// #58 budget (monthly limit lives in Setting key "budget.monthly")
+model Expense {
+  id        Int      @id @default(autoincrement())
+  amount    Float // pesos
+  category  String   @default("other") // "food" | "bills" | "school" | "transport" | "other"
+  note      String   @default("")
+  addedById Int
+  spentAt   DateTime @default(now())
 }
