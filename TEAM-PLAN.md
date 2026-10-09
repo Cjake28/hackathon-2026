@@ -489,6 +489,21 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
       Keep the GPU free on demo day: in Windows Settings → Display → Graphics, set Chrome/Edge to "Power saving" (Intel GPU),
       and close games. Only ~80 MB of the 4 GB is left.
 
+**Brain next (decided):**
+
+1. **Now: demo-line shortcuts.** The 6–8 sentences said on stage get an instant, fixed path (like "good morning",
+   "where is Ana" and "yes/no" already have), so they work every time, not just most of the time. Only the exact
+   simple wording ("add ___ to the grocery list", "wake ___ up in ___ minutes"); anything else ("don't…",
+   "actually…") goes to the AI as before. Changes still ask "Say yes to confirm" and the same permission checks run.
+   Proof: each demo line 10 times **before and after**. Anything worse → undo.
+2. **Then: help the team.** The demo can't run without alarms ringing (Hub), Ana's phone screen (UI) and the mic (Voice).
+   Brain owns the hub laptop and runs the 2:30 merge.
+3. **Only if there's time at the end:** intercom ("tell everyone dinner's ready", #18), reward points for approved
+   chores (#15), "Welcome home Ana, you still have 2 chores" on arrival (#54), and prompt caching (fixed system
+   prompt, changing parts at the end; about 1 s faster per turn).
+4. **Not doing:** a smaller model or a lower quantization. `qwen3.5:4b` is already Q4_K_M, fits 100% on the GPU and
+   answers in 1–3 s; going smaller makes it dumber for a speed problem we no longer have.
+
 ### Voice dev
 
 1. **Spike first (first 45 minutes):** get each library printing results. If one won't install on Windows within
@@ -496,6 +511,8 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
    - Mic: `sounddevice`, 16 kHz mono
    - Speech-to-text: `faster-whisper`, **multilingual** `small` (or `base` if slow), int8 on CPU. This makes Tagalog nearly free.
      Use `vad_filter=True`: without it, Whisper makes up text from silence ("Thank you for watching").
+     **On the hub laptop, keep Whisper on the CPU** (`device="cpu"`, `compute_type="int8"`, `beam_size=1`): Jarvis fills the
+     GPU (about 80 MB left). On the GPU, Whisper would fight Jarvis for memory and both would slow down.
    - Wake word: `openwakeword` has a ready **`hey_jarvis`** model (use `inference_framework="onnx"` on Windows)
    - Voice ID: SpeechBrain ECAPA (`speechbrain/spkrec-ecapa-voxceleb`) + cosine similarity; fallback `resemblyzer`
    - Text-to-speech: `pyttsx3` (Windows voices, offline, no download). It can hang after the first sentence when run from
@@ -507,6 +524,8 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
    `voice/profiles/4.npy`. Get ids from `GET /voice/people`.
 4. **Identify:** best cosine score ≥ threshold → `speakerId`, else `null` (guest). Tune the threshold in the venue.
 5. **Loop:** wake/PTT → record → transcribe + identify → `POST /voice/command` → speak `reply`.
+   Feel instant: a short beep when the person stops talking (Jarvis takes 1–3 s to answer), and save the audio of fixed
+   lines ("Say yes to confirm", "Okay, cancelled", "Ana, wake up!") so they play right away.
    **Mute the mic while speaking**, or Jarvis hears itself.
 6. **`/speak` server** (FastAPI or `http.server`) with a queue and one TTS thread (pyttsx3 isn't thread-safe).
 7. **Stage fallback:** keys `1`–`5` force the next speaker, `0` = automatic.
