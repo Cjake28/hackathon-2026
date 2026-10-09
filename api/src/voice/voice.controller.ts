@@ -25,7 +25,13 @@ import { PrismaService } from '../prisma.service';
 import { RagService } from '../rag/rag.service';
 
 type VoiceCommand = { speakerId: number | null; confidence: number; text: string };
-type PendingAction = { tool: string; args: unknown; description: string; status: 'pending' | 'done' | 'cancelled' };
+type PendingAction = {
+  tool: string;
+  args: unknown;
+  description: string;
+  status: 'pending' | 'done' | 'cancelled' | 'undone';
+  undo?: number[]; // ids of what it created, for "cancel that"
+};
 type Answer = { text: string; action?: PendingAction };
 
 const GUEST_EMAIL = 'guest@family.local'; // every unknown voice speaks as this user (seed.ts)
@@ -40,6 +46,20 @@ const BRAIN_SLOW = "Sorry, I'm still waking up. Ask me again in a few seconds.";
 let stuckTurns = 0;
 const YES = /^(yes|yeah|yep|yup|oo|opo|oho|sige|go|okay|ok|confirm|sure|do it|tama)\b/i;
 const NO = /^(no|nope|hindi|huwag|wag|cancel|stop|never mind|ayaw)\b/i;
+// "Cancel that" right after "Done!": undo what the action created, within UNDO_SECONDS.
+// The whole sentence only: "cancel that alarm" is a different request.
+const UNDO =
+  /^(hey )?(jarvis )?(cancel that|undo( that)?|never ?mind|take (that|it) back|bawiin( mo)?|huwag na|wag na|i changed my mind)( please| po| na lang)?$/i;
+const UNDO_SECONDS = 180;
+// The actions that can be undone, and how (tools whose run() returns the created row or rows).
+const UNDOERS: Record<string, (prisma: PrismaService, ids: number[]) => Promise<unknown>> = {
+  set_alarm: (p, ids) => p.alarm.deleteMany({ where: { id: { in: ids } } }),
+  give_task: (p, ids) => p.task.deleteMany({ where: { id: { in: ids } } }),
+  create_items: (p, ids) => p.item.deleteMany({ where: { id: { in: ids } } }),
+  add_event: (p, ids) => p.event.deleteMany({ where: { id: { in: ids } } }),
+  add_expense: (p, ids) => p.expense.deleteMany({ where: { id: { in: ids } } }),
+  remember: (p, ids) => p.memoryNote.deleteMany({ where: { id: { in: ids } } }),
+};
 const CONFIRM_SECONDS = 60; // a proposed action waits this long for "yes"
 // A guest asking about the family always gets this exact sentence: never leaks anything, and matches the Voice dev's
 // pre-recorded clip (voice/clips/phrases.txt), so it plays instantly. General questions still go to the AI.
@@ -115,6 +135,7 @@ export class VoiceController {
 
     const answer =
       (await this.confirmByVoice(user, conversation.id, text)) ??
+      (await this.undoByVoice(conversation.id, text)) ??
       (stuckTurns > 0 ? { text: BRAIN_SLOW } : null) ??
       (await withTimeout(
         this.think(user, conversation.id, text).catch((error) => {
@@ -159,23 +180,45 @@ export class VoiceController {
     const approve = fresh && YES.test(word);
     let status: PendingAction['status'] = 'cancelled';
     let answer: Answer | null = fresh && NO.test(word) ? { text: 'Okay, cancelled.' } : null;
+    let undo: number[] | undefined;
 
     if (approve) {
       const tool = toolsFor(user).find((t) => t.name === action.tool);
       try {
         if (!tool) throw new ForbiddenException("you're not allowed to do that.");
-        await runTool(tool, action.args, { prisma: this.prisma, rag: this.rag, user });
+        const result = await runTool(tool, action.args, { prisma: this.prisma, rag: this.rag, user });
         status = 'done';
         answer = { text: `Done! ${action.description}.` };
+        if (UNDOERS[action.tool]) undo = (Array.isArray(result) ? result : [result]).map((r: { id: number }) => r.id);
       } catch (error) {
         answer = { text: this.sorry(user, error) };
       }
     }
     await this.prisma.conversationMessage.update({
       where: { id: last.id },
-      data: { action: { ...action, status } as Prisma.InputJsonValue },
+      data: { action: { ...action, status, undo } as Prisma.InputJsonValue },
     });
     return answer;
+  }
+
+  // "Cancel that" / "bawiin mo": undoes the speaker's own last confirmed action (an alarm, task, grocery items, event,
+  // expense or memory) if it was in the last UNDO_SECONDS. Returns null when it isn't an undo request.
+  private async undoByVoice(conversationId: number, text: string): Promise<Answer | null> {
+    if (!UNDO.test(text.toLowerCase().replace(/[^\p{L}\s]/gu, '').trim())) return null;
+    const recent = await this.prisma.conversationMessage.findMany({
+      where: { conversationId, role: 'assistant', createdAt: { gte: new Date(Date.now() - UNDO_SECONDS * 1000) } },
+      orderBy: { id: 'desc' },
+      take: 4,
+    });
+    const done = recent.find((m) => (m.action as PendingAction | null)?.status === 'done');
+    const action = done?.action as PendingAction | undefined;
+    if (!done || !action?.undo?.length || !UNDOERS[action.tool]) return { text: "There's nothing I can undo right now." };
+    await UNDOERS[action.tool](this.prisma, action.undo);
+    await this.prisma.conversationMessage.update({
+      where: { id: done.id },
+      data: { action: { ...action, status: 'undone' } as Prisma.InputJsonValue },
+    });
+    return { text: `Okay, undone: ${action.description}.` };
   }
 
   // The AI answers, using tools (up to 5 steps). A tool that changes data stops the loop and comes back as a
@@ -189,12 +232,13 @@ export class VoiceController {
     const tools = guest ? [] : toolsFor(user).filter((t) => t.name !== 'search_documents');
     const deps = { prisma: this.prisma, rag: this.rag, user };
 
-    // Earlier messages only when Jarvis just asked something ("Which alarm?"): otherwise the small model copies old
-    // answers ("Ana is at school") instead of calling the tool again.
+    // Earlier messages only when Jarvis just asked something ("Which alarm?"), and only that one exchange: the small
+    // model copies old answers ("Ana is at school", even "Done! Remember: …" without saving anything) instead of
+    // calling the tool again.
     const recent = await this.prisma.conversationMessage.findMany({
       where: { conversationId, createdAt: { gte: new Date(Date.now() - RECENT_MINUTES * 60_000) } },
       orderBy: { id: 'desc' },
-      take: 8,
+      take: 2,
     });
     const followUp = recent[0]?.role === 'assistant' && recent[0].content.trim().endsWith('?') && !recent[0].action;
     const history: ChatMessage[] = [
@@ -214,7 +258,11 @@ export class VoiceController {
       for (let step = 0; step < 5; step++) {
         const reply = await this.ai.toolStep(messages, toolSpecs(tools));
         const calls = reply.tool_calls ?? [];
-        if (!calls.length) return { text: spoken(reply.content) || 'Okay.' };
+        if (!calls.length) {
+          // Only this code says "Done!", after an action really ran. The model saying it means it pretended.
+          if (/^\W*(done|tapos na)\b/i.test(reply.content)) return { text: 'Sorry, could you say that again?' };
+          return { text: spoken(reply.content) || 'Okay.' };
+        }
         messages.push(reply);
 
         for (const call of calls) {
