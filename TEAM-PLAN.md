@@ -538,6 +538,24 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
    - **Everyone:** `npm run db:seed` after pulling (new `intercom.send` permission).
 4. **Not doing:** a smaller model or a lower quantization. `qwen3.5:4b` is already Q4_K_M, fits 100% on the GPU and
    answers in 1–3 s; going smaller makes it dumber for a speed problem we no longer have.
+5. **Now (user: "do all of that"), in this order, each tested and pushed on its own:**
+   1. **Brain offline safety net:** if the AI fails, Jarvis says "Sorry, my brain is restarting. Alarms and reminders
+      still work." instead of going silent (`voice.controller.ts`).
+   2. **Talking to Jarvis = home:** a voice recognized at the hub mic marks that person home (`lastSeenAt`), so
+      "who's home" works without their phone (`/voice/command` only, not typed or tunnelled).
+   3. **Wake-up alarm dismissed → good-morning briefing:** the hub says Ana's briefing right after she taps Dismiss
+      (Brain helper; one call added in **Hub's** `alarms.controller.ts` dismiss).
+   4. **Alarm escalation (#27):** a kid's alarm still ringing after 2 min → notice to the parents + the hub says
+      "Ana's alarm has been ringing for 2 minutes" (in **Hub's** `scheduler.service.ts`).
+   5. **Phone screens (web, phones open the hub URL):** Ana's device page (alarm full screen + dismiss/snooze, task
+      popup, chore before/after photos with the real AI check, intercom banner, points) and a parent hub page
+      (family + who's home, points, "Jarvis heard…" feed, tasks with photos, talk to Jarvis with Yes/No). Backup for
+      the mobile app until it's connected.
+   6. **"Cancel that" / undo:** right after "Done!", undoes the alarm / task / grocery items / event / expense / memory.
+   7. **Prompt caching:** fixed system prompt + tools, the changing parts (time, speaker, family, memory) in the user
+      message, so the AI skips re-reading ~1,600 tokens. Measure first; skip if the gain is under 0.3 s.
+   8. **Several actions at once:** "give Ana the dishes and remind her in 10 minutes" → one "Say yes" for both.
+   Hub dev: items 3 and 4 touch your files (small, marked "Brain"); pull before editing them.
 
 ### Voice dev
 
@@ -561,6 +579,29 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
 5. **Loop:** wake/PTT → record → transcribe + identify → `POST /voice/command` → speak `reply`.
    Feel instant: a short beep when the person stops talking (Jarvis takes 1–3 s to answer), and save the audio of fixed
    lines ("Say yes to confirm", "Okay, cancelled", "Ana, wake up!") so they play right away.
+   **Thinking sound (done: Brain added it on the user's call, clips made; Voice dev, pull before editing `main.py`):** the moment someone stops talking, Jarvis says a short filler from a
+   pre-recorded clip while the ears and the brain work, so the wait sounds like thinking, not freezing (offline Whisper
+   takes ~4 s). Add to `clips/phrases.txt` and run `python pregen.py` (Jarvis's ElevenLabs voice, plays offline too):
+   `Hmm.` · `Okay.` · `Sige.` · `Let me check.` In `main.py`, right after `clip = audio.record()` (non-empty), before
+   `stt.transcribe`: `tts.say(random.choice(FILLERS))`. `tts.say()` only queues, so the filler plays while speech-to-text
+   and `/voice/command` run, and the reply plays right after it. Skip it when the last reply was a question waiting for
+   yes/no (`res['pending']`): that answer comes back in 0.3 s anyway.
+   **Measured on the hub laptop** (10 demo lines, synthetic voice): ElevenLabs Scribe 91% right, 1.0 s, Tagalog perfect ·
+   Whisper `small` 74%, 4.0 s, Tagalog unusable · Whisper `base` 77%, 1.4 s, but heard "eggs" as "X". Decision: Scribe
+   when online, `small` as the offline backup (unchanged).
+   **Background voices (decided; Brain codes it on the user's call, Voice dev's files):** in a noisy hall, other people
+   talking is the hardest noise (it *is* speech). Three layers:
+   1. **Headset / close mic** (the team brings one): the speaker is loud, the room is quiet. Biggest win, no code.
+   2. **Keep only the main speaker's words** (`stt.py`, online): Scribe with `diarize` labels who said each word; keep
+      the speaker whose words are loudest in the clip (closest to the mic), drop the rest.
+   3. **Stop recording when the speaker stops** (`audio.py`): today recording ends after 1 s of room silence, which never
+      comes in a hall, so it runs the full 8 s and picks up other people. New: also count as quiet anything well below
+      the speaker's own loudness.
+   Skipped: AI voice separation (SepFormer etc.): too slow on the hub CPU for the time left.
+   **Done (2 and 3), tested** with a loud main speaker + a background talker fed through `audio.record()`: before, every
+   recording ran 8.0 s and Scribe wrote down the other person too ("…wake Anna up in four minutes Let's grab some before
+   the next talk starts…"); after, 3.7–3.9 s and only "Hey Jarvis, wake Anna up in four minutes". Quiet room: no
+   cut-offs, same Scribe text and speed on all 10 demo clips. Voice dev: pull before editing `audio.py` / `stt.py`.
    **Mute the mic while speaking**, or Jarvis hears itself.
 6. **`/speak` server** (FastAPI or `http.server`) with a queue and one TTS thread (pyttsx3 isn't thread-safe).
 7. **Stage fallback:** keys `1`–`5` force the next speaker, `0` = automatic.
