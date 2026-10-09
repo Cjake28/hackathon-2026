@@ -13,3 +13,13 @@ Ben, Mom gave you a task: wash the dishes
 Ana, Dad gave you a task: feed the dog
 Ben, Dad gave you a task: take out the trash
 mock reply
+# Demo lines from TEAM-PLAN (Brain), exact hub text
+Set an alarm "Wake up" for Ana in 4 minutes? Say yes to confirm.
+Done! Set an alarm "Wake up" for Ana in 4 minutes.
+Sorry Ana. Mom set that alarm, so only a parent can remove it.
+Give Ana a chore: Wash the dishes? Say yes to confirm.
+Done! Give Ana a chore: Wash the dishes.
+Ana, Mom gave you a chore: Wash the dishes
+Okay, cancelled.
+Ana, Wake up!
+Welcome home, Ana
