@@ -4,7 +4,8 @@ import type { FastifyRequest } from 'fastify';
 import { CurrentUser } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.guard';
 import { hasPermission } from '../auth/permissions';
-import { notify, speak } from '../family';
+import { notify } from '../family';
+import { welcomeHome } from '../location/welcome';
 import { PrismaService } from '../prisma.service';
 
 const FAMILY_ROLES = ['parent', 'child'];
@@ -63,14 +64,15 @@ export class DeviceController {
     return { cursor, notices, ringing, home };
   }
 
-  // Updates lastSeenAt/lastIp. A family member back after 10+ min → presence:arrived + "Welcome home, Ana".
+  // Updates lastSeenAt/lastIp. A family member back after 10+ min → presence:arrived + "Welcome home, Ana" and the
+  // tasks left (#54, Brain's welcomeHome, same as arriving at Home on the Map page).
   private async heartbeat(user: AuthUser, ip: string) {
     const before = await this.prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { lastSeenAt: true } });
     await this.prisma.user.update({ where: { id: user.id }, data: { lastSeenAt: new Date(), lastIp: ip } });
     const away = !before.lastSeenAt || Date.now() - before.lastSeenAt.getTime() > AWAY_MS;
     if (away && FAMILY_ROLES.includes(user.role)) {
       await notify(this.prisma, null, 'presence:arrived', `${user.name} is home`, { userId: user.id });
-      speak(`Welcome home, ${user.name}`);
+      welcomeHome(this.prisma, user);
     }
   }
 }
