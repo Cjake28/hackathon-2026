@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Alarm, Basket, Brain, CalendarBlank, CaretRight, Cpu, GearSix, Lock, MapPin, ShieldCheck, Signpost, SpeakerHigh, User, UsersThree, Wallet, WifiSlash } from 'phosphor-react-native';
+import { Alarm, Basket, Brain, CalendarBlank, CaretRight, Cpu, GearSix, Lock, MapPin, NavigationArrow, ShieldCheck, Signpost, SpeakerHigh, User, UsersThree, Wallet, WifiSlash } from 'phosphor-react-native';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar';
@@ -180,9 +180,16 @@ export default function HubScreen() {
           <Card className="p-4">
             <CardList>
               <ManageRow icon={Basket} accent="teal" title="Grocery" description="The household shopping list" onPress={() => router.push("/grocery")} />
-              <ManageRow icon={Brain} accent="rose" title="What Jarvis remembers" description="Notes about each person, delete any" onPress={() => router.push("/memory")} />
-              <ManageRow icon={CalendarBlank} accent="azure" title="Calendar" description="What is coming up this week" onPress={() => router.push("/calendar")} />
-              <ManageRow icon={Wallet} accent="violet" title="Budget" description="What the house spent this month" onPress={() => router.push("/budget")} />
+              <ManageRow icon={Brain} accent="rose" title="What Onai remembers" description="Notes about each person, delete any" onPress={() => router.push("/memory")} />
+              {can('calendar.use') ? (
+                <ManageRow icon={CalendarBlank} accent="azure" title="Calendar" description="What is coming up this week" onPress={() => router.push("/calendar")} />
+              ) : null}
+              {can('budget.use') ? (
+                <ManageRow icon={Wallet} accent="violet" title="Budget" description="What the house spent this month" onPress={() => router.push("/budget")} />
+              ) : null}
+              {can('location.read') ? (
+                <ManageRow icon={NavigationArrow} accent="amber" title="Where everyone is" description="Who's home, out, or at school" onPress={() => router.push('/whereabouts')} />
+              ) : null}
               <ManageRow icon={Alarm} accent="amber" title="Alarms" description={activeAlarms === 1 ? '1 on' : `${activeAlarms} on`} onPress={() => router.push('/(app)/(tabs)/alarms')} />
               {can('users.manage') ? (
                 <ManageRow icon={UsersThree} accent="arc" title="Family accounts" description="Make a login for someone in the house" onPress={() => router.push('/accounts')} />
@@ -190,7 +197,7 @@ export default function HubScreen() {
               {can('roles.manage') ? (
                 <ManageRow icon={ShieldCheck} accent="teal" title="Roles" description="What each role is allowed to do" onPress={() => router.push('/roles')} />
               ) : null}
-              <ManageRow icon={Signpost} accent="violet" title="What's coming" description="Everything planned for Jarvis" onPress={() => router.push('/roadmap')} />
+              <ManageRow icon={Signpost} accent="violet" title="What's coming" description="Everything planned for Onai" onPress={() => router.push('/roadmap')} />
               <ManageRow icon={User} accent="azure" title="Your details" description="Name and email on this device" onPress={() => router.push('/personal-info')} />
               <ManageRow icon={GearSix} accent="teal" title="Settings" description="Hub behaviour and privacy" onPress={() => router.push('/settings')} />
             </CardList>

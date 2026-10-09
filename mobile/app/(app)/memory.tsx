@@ -9,7 +9,7 @@ import { useDeleteMemory, useMemory } from '@/hooks/useHub';
 import { relativeTime } from '@/lib/time';
 import type { MemoryNote } from '@/types';
 
-// "What Jarvis remembers about me", with a delete on every line. Only your own
+// "What Onai remembers about me", with a delete on every line. Only your own
 // notes: nobody else can read what the hub keeps about you.
 export default function MemoryScreen() {
   const { data: notes = [] } = useMemory();
@@ -24,7 +24,7 @@ export default function MemoryScreen() {
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader
-        title="What Jarvis remembers"
+        title="What Onai remembers"
         subtitle={notes.length === 1 ? '1 note about you' : `${notes.length} notes about you`}
         back
       />
@@ -35,7 +35,7 @@ export default function MemoryScreen() {
           <View className="flex-1 gap-1">
             <Text className="font-medium text-accent-teal-onSoft">These notes never leave the house</Text>
             <Text variant="small" className="text-accent-teal-onSoft">
-              Jarvis writes them down so it can answer better, and only you can see yours. Delete any of them and it
+              Onai writes them down so it can answer better, and only you can see yours. Delete any of them and it
               forgets, for good.
             </Text>
           </View>
@@ -45,7 +45,7 @@ export default function MemoryScreen() {
           <EmptyState
             icon={Brain}
             title="Nothing remembered yet"
-            subtitle="As you talk to Jarvis, the things worth keeping show up here."
+            subtitle="As you talk to Onai, the things worth keeping show up here."
           />
         ) : (
           <Card className="p-4">

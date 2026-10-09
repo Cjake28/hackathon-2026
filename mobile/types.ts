@@ -188,8 +188,8 @@ export type Utterance = {
 
 export type ListenState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
-// Grocery (#58), memory (#9) and the P2 calendar/budget pages. Shapes follow
-// TEAM-PLAN.md §4.3 so these screens can swap to the API without changing.
+// Calendar (#58), budget and location, as TEAM-PLAN.md 4.4 defines them.
+// GroceryItem below is the on-phone shape; the Grocery screen uses /items.
 export type GroceryItem = {
   id: string;
   name: string;
@@ -198,22 +198,46 @@ export type GroceryItem = {
   addedBy: string;
 };
 
-export type FamilyEvent = {
-  id: string;
-  title: string;
-  startsAt: string;
-  personId: string | null;
-};
-
 export type ExpenseCategory = 'food' | 'bills' | 'school' | 'transport' | 'other';
 
 export type Expense = {
-  id: string;
+  id: number;
   amount: number;
-  category: ExpenseCategory;
+  category: string; // usually an ExpenseCategory, but Onai can invent others
   note: string;
-  addedBy: string;
+  addedById: number;
   spentAt: string;
+};
+
+export type BudgetSummary = {
+  month: string; // "2026-10"
+  total: number;
+  limit: number | null;
+  byCategory: Record<string, number>;
+};
+
+// Where someone was last seen (parents only). `place` is a named spot like "Home" or "School".
+export type Whereabouts = {
+  userId: number;
+  name: string;
+  lat: number;
+  lng: number;
+  accuracy: number | null;
+  place: string | null;
+  since: string;
+  updatedAt: string;
+};
+
+export type Place = { id: number; name: string; lat: number; lng: number; radiusM: number };
+
+// A calendar event on the hub (GET /events). userId null = the whole family.
+export type HubEvent = {
+  id: number;
+  title: string;
+  startsAt: string;
+  userId: number | null;
+  createdById: number; // whoever added it (they, or a parent, may move or delete it)
+  createdAt: string;
 };
 
 // ---- Hub API (TEAM-PLAN.md 4.4, docs/mobile-hub.md). "Hub" names so they don't clash with the local types above. ----
@@ -254,7 +278,9 @@ export type NoticeKind =
   | 'presence:arrived'
   | 'presence:left'
   | 'voice:heard'
-  | 'intercom';
+  | 'intercom'
+  | 'alarm:ignored' // parents: a kid's alarm rang 2 min with no dismiss
+  | 'event:soon'; // a calendar event starts in 15 min
 export type HubNotice = {
   id: number;
   toUserId: number | null; // null = every device

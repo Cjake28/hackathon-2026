@@ -140,9 +140,9 @@ export default function FamilyScreen() {
             <Card className="flex-row items-center gap-3 bg-accent-teal-soft p-4">
               <Icon as={Ear} weight="fill" size={24} className="text-accent-teal-onSoft" />
               <View className="flex-1 gap-0.5">
-                <Text className="font-medium text-accent-teal-onSoft">What Jarvis heard</Text>
+                <Text className="font-medium text-accent-teal-onSoft">What Onai heard</Text>
                 <Text variant="small" className="text-accent-teal-onSoft">
-                  The last things said out loud in the house, and what Jarvis answered.
+                  The last things said out loud in the house, and what Onai answered.
                 </Text>
               </View>
             </Card>

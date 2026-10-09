@@ -25,7 +25,7 @@ const TIERS: { key: Tier; label: string }[] = [
 const ROADMAP: Section[] = [
   { id: 'core', title: 'Core AI', features: [
     { n: 1, title: 'Local AI brain that runs on a home hub and works without internet', tier: 'core', demo: true },
-    { n: 2, title: 'Voice conversation with a wake word, Jarvis style', tier: 'core', demo: true },
+    { n: 2, title: 'Voice conversation with a wake word, Onai style', tier: 'core', demo: true },
     { n: 3, title: 'Voice ID that knows which family member is talking', tier: 'core', demo: true },
     { n: 4, title: 'Vision through cameras', tier: 'core', demo: true },
     { n: 5, title: 'Tagalog, Taglish, and English support', tier: 'second', demo: false },
@@ -38,7 +38,7 @@ const ROADMAP: Section[] = [
   ] },
   { id: 'tasks', title: 'Family tasks', features: [
     { n: 12, title: "Task relay: a parent gives a task and it's delivered to the child's device", tier: 'core', demo: true },
-    { n: 13, title: 'Chores mode with camera verification, before and after photos, and specific feedback', tier: 'core', demo: true },
+    { n: 13, title: 'Chores: the kid checks it off, parents see it straight away, and it earns 10 points', tier: 'core', demo: true },
     { n: 14, title: 'Detection of who actually did the chore', tier: 'dropped', demo: false },
     { n: 15, title: 'Reward points — a scoreboard', tier: 'second', demo: false },
     { n: 16, title: 'Fair chore rotation that assigns and rotates chores automatically', tier: 'second', demo: false, isNew: true },
@@ -96,7 +96,7 @@ export default function RoadmapScreen() {
         <Card className="gap-3 p-6">
           <Text variant="h3">{COUNTS.total} features</Text>
           <Text variant="muted">
-            Everything Jarvis is meant to do, in the order it was agreed. Nine are built and demoable today; the rest is the plan.
+            Everything Onai is meant to do, in the order it was agreed. Nine are built and demoable today; the rest is the plan.
           </Text>
           <View className="flex-row justify-between">
             <Text variant="small" className="text-success">{COUNTS.demo} working now</Text>

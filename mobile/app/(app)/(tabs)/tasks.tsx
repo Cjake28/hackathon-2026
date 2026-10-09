@@ -156,7 +156,7 @@ export default function TasksScreen() {
           <EmptyState
             icon={ListChecks}
             title={filter === 'done' ? 'Nothing finished yet' : 'Nothing outstanding'}
-            subtitle={'Say "Hey Jarvis, tell Ben to put the bins out" and it\'ll pop up on his phone.'}
+            subtitle={'Say "Hey Onai, tell Ben to put the bins out" and it\'ll pop up on his phone.'}
           />
         }
         ListFooterComponent={

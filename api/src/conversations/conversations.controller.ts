@@ -42,7 +42,7 @@ type PendingAction = {
   args: unknown;
   description: string;
   status: 'pending' | 'done' | 'cancelled';
-  also?: { tool: string; args: unknown }[]; // more actions under the same Confirm (Jarvis voice, voice.controller.ts)
+  also?: { tool: string; args: unknown }[]; // more actions under the same Confirm (Onai voice, voice.controller.ts)
 };
 
 // Saved AI chats, one list per user. Sending a message streams the reply:
@@ -177,7 +177,7 @@ export class ConversationsController {
     let status: PendingAction['status'] = 'cancelled';
     let note = `Cancelled: ${action.description}.`;
     if (body.approve) {
-      // Permissions are checked again now, not when the AI proposed it. `also`: Jarvis voice actions can group several.
+      // Permissions are checked again now, not when the AI proposed it. `also`: Onai voice actions can group several.
       for (const step of [action, ...(action.also ?? [])]) {
         const tool = toolsFor(user).find((t) => t.name === step.tool);
         if (!tool) throw new ForbiddenException('You are not allowed to do that');

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 
-// Every screen owns its own header — there's no global top bar (matches Jarvis).
+// Every screen owns its own header — there's no global top bar (matches Onai).
 export function ScreenHeader({
   title,
   subtitle,

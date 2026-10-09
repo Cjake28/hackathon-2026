@@ -1,7 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { ApiError, api } from '@/lib/api';
-import type { HubAlarm, HubNotice, HubTask, MemoryNote, Person, Points, Poll, RoleRow, User, VoiceReply } from '@/types';
+import type {
+  BudgetSummary,
+  Expense,
+  HubEvent,
+  HubAlarm,
+  HubNotice,
+  HubTask,
+  MemoryNote,
+  Person,
+  Place,
+  Points,
+  Poll,
+  RoleRow,
+  User,
+  VoiceReply,
+  Whereabouts,
+} from '@/types';
 
 // Everything the app reads and changes on the hub (TEAM-PLAN.md 4.5). The data lives on the hub, not on the phone.
 
@@ -18,6 +34,7 @@ const REFRESH: Partial<Record<HubNotice['kind'], string[]>> = {
   'task:reviewed': ['tasks', 'points'],
   'presence:arrived': ['family'],
   'presence:left': ['family'],
+  'event:soon': ['events'],
 };
 
 export function useDevicePoll(onNotice: (notice: HubNotice) => void) {
@@ -49,7 +66,7 @@ export function useDevicePoll(onNotice: (notice: HubNotice) => void) {
   });
 }
 
-// "Jarvis heard…" for the parent's screen: the last 20 things Jarvis heard (filled by the poll).
+// "Onai heard…" for the parent's screen: the last 20 things Onai heard (filled by the poll).
 // notice.data = { speaker, confidence, reply }
 export const useHeard = () =>
   useQuery<HubNotice[]>({ queryKey: ['heard'], queryFn: () => [], initialData: [], staleTime: Infinity });
@@ -173,15 +190,16 @@ export const useDeleteTask = () => {
   });
 };
 
-// ---- Talk to Jarvis (typed; also the stage backup if the mic fails) ----
-// reply.pending = Jarvis asks "… Say yes to confirm": send "yes" (or "no") as the next text.
+// ---- Talk to Onai (typed; also the stage backup if the mic fails) ----
+// reply.pending = Onai asks "… Say yes to confirm": send "yes" (or "no") as the next text.
 export const useTalk = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (text: string) => api.post<VoiceReply>('/voice/text', { text }),
-    // Jarvis may have changed something: refresh the lists.
+    // Onai may have changed something: refresh the lists.
     onSuccess: () => {
-      for (const key of ['alarms', 'tasks', 'items', 'points', 'memory']) qc.invalidateQueries({ queryKey: [key] });
+      for (const key of ['alarms', 'tasks', 'items', 'points', 'memory', 'events', 'expenses', 'budget'])
+        qc.invalidateQueries({ queryKey: [key] });
     },
   });
 };
@@ -191,10 +209,10 @@ export const useTalk = () => {
 // Leaderboard, most points first. 10 points per finished chore.
 export const usePoints = () => useQuery({ queryKey: ['points'], queryFn: () => api.get<Points[]>('/points') });
 
-// "Good morning" button: Jarvis's short summary of my day (alarms, events, tasks, grocery list).
+// "Good morning" button: Onai's short summary of my day (alarms, events, tasks, grocery list).
 export const useBriefing = () => useMutation({ mutationFn: () => api.get<{ text: string }>('/briefing') });
 
-// "What Jarvis remembers about me" (only my own notes), with delete.
+// "What Onai remembers about me" (only my own notes), with delete.
 export const useMemory = () => useQuery({ queryKey: ['memory'], queryFn: () => api.get<MemoryNote[]>('/memory') });
 
 export const useDeleteMemory = () => {
@@ -202,6 +220,105 @@ export const useDeleteMemory = () => {
   return useMutation({
     mutationFn: (id: number) => api.delete<MemoryNote>(`/memory/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['memory'] }),
+  });
+};
+
+// ---- Calendar (calendar.use) ----
+// From today on, soonest first. Onai adds these by voice too ("piano on Saturday at 4").
+
+export const useEvents = () =>
+  useQuery({ queryKey: ['events'], queryFn: () => api.get<HubEvent[]>('/events') });
+
+export const useCreateEvent = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    // startsAt is a full ISO date-time. userId left out = the whole family.
+    mutationFn: (data: { title: string; startsAt: string; userId?: number | null }) =>
+      api.post<HubEvent>('/events', data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['events'] }),
+  });
+};
+
+// Move (startsAt), rename (title) or change whose it is (userId). Whoever added it, or a parent.
+export const useUpdateEvent = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: number; title?: string; startsAt?: string; userId?: number | null }) =>
+      api.patch<HubEvent>(`/events/${id}`, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['events'] }),
+  });
+};
+
+// Whoever added it, or a parent. Anyone else gets the hub's alert:
+// "Mom added that event, so only a parent can change it."
+export const useDeleteEvent = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete<HubEvent>(`/events/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['events'] }),
+  });
+};
+
+// ---- Budget (budget.use) ----
+// The month's total, the limit the hub keeps, and the split per category.
+
+export const useExpenses = () =>
+  useQuery({ queryKey: ['expenses'], queryFn: () => api.get<Expense[]>('/expenses') });
+
+export const useBudgetSummary = () =>
+  useQuery({ queryKey: ['budget'], queryFn: () => api.get<BudgetSummary>('/expenses/summary') });
+
+export const useCreateExpense = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { amount: number; category?: string; note?: string }) =>
+      api.post<Expense>('/expenses', data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expenses'] });
+      qc.invalidateQueries({ queryKey: ['budget'] });
+    },
+  });
+};
+
+export const useDeleteExpense = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete<Expense>(`/expenses/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expenses'] });
+      qc.invalidateQueries({ queryKey: ['budget'] });
+    },
+  });
+};
+
+// ---- Where everyone is (#51) and the places that count as somewhere (#52) ----
+// Only parents (location.read) see this. The phone sends its own position with useShareLocation (hooks/useLocationShare.ts).
+
+export const useWhereabouts = () =>
+  useQuery({ queryKey: ['whereabouts'], queryFn: () => api.get<Whereabouts[]>('/location'), refetchInterval: 15000 });
+
+export const usePlaces = () => useQuery({ queryKey: ['places'], queryFn: () => api.get<Place[]>('/places') });
+
+export const useAddPlace = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; lat: number; lng: number; radiusM?: number }) =>
+      api.post<Place>('/places', data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['places'] });
+      qc.invalidateQueries({ queryKey: ['whereabouts'] });
+    },
+  });
+};
+
+export const useDeletePlace = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete<Place>(`/places/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['places'] });
+      qc.invalidateQueries({ queryKey: ['whereabouts'] });
+    },
   });
 };
 
@@ -236,7 +353,7 @@ export const useUpdateUser = () => {
   });
 };
 
-// Also deletes their alarms, tasks and notes. You can't delete yourself or Guest (Jarvis uses it for unknown voices).
+// Also deletes their alarms, tasks and notes. You can't delete yourself or Guest (Onai uses it for unknown voices).
 export const useDeleteUser = () => {
   const qc = useQueryClient();
   return useMutation({
