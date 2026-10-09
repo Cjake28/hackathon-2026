@@ -17,6 +17,8 @@ import state
 EL_RATE = 22050  # pcm_22050 works on every ElevenLabs plan
 KOKORO_VOICE = 'af_heart'
 EL_TIMEOUT = 2  # seconds to wait for ElevenLabs while someone is waiting to hear the answer
+EL_MODEL = 'eleven_flash_v2_5'  # live replies: fast + multilingual (Taglish)
+PREGEN_MODEL = 'eleven_multilingual_v2'  # pregen clips: best quality, latency doesn't matter
 CACHE_DIR = config.CLIPS_DIR / 'cache'  # ElevenLabs replies saved at runtime (git-ignored)
 
 _q: queue.Queue[str] = queue.Queue()
@@ -30,7 +32,7 @@ def clip_path(text: str, folder=config.CLIPS_DIR):
     return folder / f"{hashlib.sha1(text.strip().lower().encode('utf-8')).hexdigest()}.wav"
 
 
-def eleven(text: str, timeout: float = config.ELEVENLABS_TIMEOUT) -> np.ndarray:
+def eleven(text: str, timeout: float = config.ELEVENLABS_TIMEOUT, model: str = EL_MODEL) -> np.ndarray:
     """ElevenLabs TTS -> int16 mono samples at EL_RATE. Raises on any error."""
     if not config.ELEVENLABS_API_KEY or not config.ELEVENLABS_VOICE_ID:
         raise RuntimeError('no ElevenLabs key/voice')
@@ -38,7 +40,7 @@ def eleven(text: str, timeout: float = config.ELEVENLABS_TIMEOUT) -> np.ndarray:
         f'https://api.elevenlabs.io/v1/text-to-speech/{config.ELEVENLABS_VOICE_ID}',
         params={'output_format': f'pcm_{EL_RATE}'},
         headers={'xi-api-key': config.ELEVENLABS_API_KEY, 'content-type': 'application/json'},
-        json={'text': text, 'model_id': 'eleven_multilingual_v2'},
+        json={'text': text, 'model_id': model},
         timeout=timeout,
     )
     r.raise_for_status()
