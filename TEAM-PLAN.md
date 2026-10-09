@@ -571,6 +571,15 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
    **Measured on the hub laptop** (10 demo lines, synthetic voice): ElevenLabs Scribe 91% right, 1.0 s, Tagalog perfect ·
    Whisper `small` 74%, 4.0 s, Tagalog unusable · Whisper `base` 77%, 1.4 s, but heard "eggs" as "X". Decision: Scribe
    when online, `small` as the offline backup (unchanged).
+   **Background voices (decided; Brain codes it on the user's call, Voice dev's files):** in a noisy hall, other people
+   talking is the hardest noise (it *is* speech). Three layers:
+   1. **Headset / close mic** (the team brings one): the speaker is loud, the room is quiet. Biggest win, no code.
+   2. **Keep only the main speaker's words** (`stt.py`, online): Scribe with `diarize` labels who said each word; keep
+      the speaker whose words are loudest in the clip (closest to the mic), drop the rest.
+   3. **Stop recording when the speaker stops** (`audio.py`): today recording ends after 1 s of room silence, which never
+      comes in a hall, so it runs the full 8 s and picks up other people. New: also count as quiet anything well below
+      the speaker's own loudness.
+   Skipped: AI voice separation (SepFormer etc.): too slow on the hub CPU for the time left.
    **Mute the mic while speaking**, or Jarvis hears itself.
 6. **`/speak` server** (FastAPI or `http.server`) with a queue and one TTS thread (pyttsx3 isn't thread-safe).
 7. **Stage fallback:** keys `1`–`5` force the next speaker, `0` = automatic.
