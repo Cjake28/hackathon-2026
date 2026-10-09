@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { AuthUser } from '../auth/auth.guard';
 import { hasPermission, type Permission } from '../auth/permissions';
 import { briefingFacts, say, sayTime } from '../briefing/briefing-facts';
+import { removeFromGoogle } from '../calendar/google-calendar';
 import { pointsFor } from '../chores/points';
 import { assertCanActFor, findPerson, nextAt, notify, speak } from '../family';
 import { distanceM, sayDistance } from '../location/geo';
@@ -244,7 +245,8 @@ export const TOOLS = [
     describe: ({ id }) => `Delete event #${id} from the calendar`,
     check: ({ id }, { prisma, user }) => eventICanChange(prisma, user, id),
     run: async ({ id }, { prisma, user }) => {
-      await eventICanChange(prisma, user, id);
+      const event = await eventICanChange(prisma, user, id);
+      removeFromGoogle(event).catch(() => {}); // its Google Calendar copy goes too
       return prisma.event.delete({ where: { id } });
     },
   }),

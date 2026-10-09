@@ -3,6 +3,7 @@ import { eventICanChange } from '../ai/tools';
 import { Can, CurrentUser } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.guard';
 import { PrismaService } from '../prisma.service';
+import { removeFromGoogle } from './google-calendar';
 
 type EventInput = { title: string; startsAt: string; userId?: number | null };
 
@@ -44,10 +45,11 @@ export class EventsController {
     });
   }
 
-  // Whoever added it, or a parent (same rule as Onai's cancel_event).
+  // Whoever added it, or a parent (same rule as Onai's cancel_event). Its Google Calendar copy goes too.
   @Delete(':id')
   async remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
-    await eventICanChange(this.prisma, user, id);
+    const event = await eventICanChange(this.prisma, user, id);
+    removeFromGoogle(event).catch(() => {});
     return this.prisma.event.delete({ where: { id } });
   }
 }

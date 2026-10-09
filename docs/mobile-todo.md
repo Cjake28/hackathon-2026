@@ -37,7 +37,12 @@ Only needed for the "Ana asks Jarvis from school" moment (Cloudflare tunnel).
 - [ ] Replace `lib/api.ts` (the hub address can be changed on the phone and is saved)
 - [ ] `components/HubAddress.tsx` in Settings and on the login screen
 
-### 🟢 6. Roadmap screen matches what we demo
+### 🟡 6. Google Calendar in Settings [14]
+The hub copies each person's events to their own Google Calendar once they connect it (`docs/google-calendar.md`).
+- [ ] `GoogleStatus` type + `useGoogle` / `useConnectGoogle` / `useVerifyGoogle` / `useConnectFamilyGoogle` [14.1, 14.2]
+- [ ] `components/GoogleCalendar.tsx` in Settings: share → Gmail → the one-time code from that calendar [14.3], then check it [14.4]
+
+### 🟢 7. Roadmap screen matches what we demo
 - [ ] `roadmap.tsx` #13 says "camera verification, before and after photos … `demo: true`". Chores are now
       **checked off without photos**: reword it (e.g. "Chores: the kid checks it off, parents see it, +10 points") or set
       `demo: false` so the judges aren't promised a photo check.
@@ -48,4 +53,5 @@ Only needed for the "Ana asks Jarvis from school" moment (Cloudflare tunnel).
 - Don't change `api/`: ask the Hub dev.
 
 ## When you're done
-Run the checks in `docs/mobile-hub.md`: section 11 (alarm and tasks), 12.5 (away from home), 13.6 (calendar).
+Run the checks in `docs/mobile-hub.md`: section 11 (alarm and tasks), 12.5 (away from home), 13.6 (calendar),
+14.4 (Google Calendar).

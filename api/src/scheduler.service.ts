@@ -1,5 +1,6 @@
 import { Injectable, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import type { Alarm } from '@prisma/client';
+import { syncGoogle } from './calendar/google-calendar';
 import { nextAt, notify, speak } from './family';
 import { PrismaService } from './prisma.service';
 
@@ -59,6 +60,7 @@ export class SchedulerService implements OnApplicationBootstrap, OnModuleDestroy
       speak(`${user.name}, ${alarm.label}!`);
     }
     await this.remindEvents(now);
+    void syncGoogle(this.prisma).catch(() => {}); // calendar copies in Google; not awaited: alarms never wait for Google
   }
 
   // 15 min before a calendar event: an event:soon notice on that person's devices (every family device for a family

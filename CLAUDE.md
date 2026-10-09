@@ -5,8 +5,9 @@
 - Everything runs on one computer (the "hub") and devices on the same Wi-Fi/LAN use it.
 - The AI is always local (Ollama). Audio, photos and memory notes never go to an online service.
 - Online services are allowed for extras (TEAM-PLAN.md section 9): ElevenLabs text-to-speech in `voice/`,
-  Google Maps (JS, Geocoding, Routes) with Leaflet + OpenStreetMap as the no-key fallback, and a Cloudflare tunnel for
-  location. The core must still work with the internet off: always fall back to local.
+  Google Maps (JS, Geocoding, Routes) with Leaflet + OpenStreetMap as the no-key fallback, a Cloudflare tunnel for
+  location, and Google Calendar copies of calendar events (service account, no OAuth: `docs/google-calendar.md`).
+  The core must still work with the internet off: always fall back to local (events are saved on the hub first).
 - Login is email (or a plain name like "ana") + password only. No Google sign-in, no sign-up: Mom and Dad make every
   account (see Auth & permissions).
 

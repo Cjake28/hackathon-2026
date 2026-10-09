@@ -859,6 +859,7 @@ useEffect(() => {
 | Tasks | `GET /tasks` (`?all=1` parents), `POST /tasks` (parents), `PATCH /tasks/:id { status }`, `DELETE` (parents) | `tasks.own` / `tasks.assign` |
 | Talk to Jarvis | `POST /voice/text { text }` → `{ reply, pending }` (max 10 per minute) | `ai.use` |
 | Calendar | `GET /events` (from today), `POST /events { title, startsAt, userId? }`, `PATCH/DELETE /events/:id` | `calendar.use`; change/delete: whoever added it, or a parent |
+| Google Calendar | `GET /google` → `{ enabled, shareWith, mine, pending, family }`, `PATCH /google/me { calendarId }` (puts a code in it), `PATCH /google/me/verify { code }`, `PATCH /google/family { calendarId }` ("" disconnects) | `calendar.use`; family: parents |
 | Points | `GET /points` → `[{ name, points, choresDone }]` | everyone |
 | Briefing | `GET /briefing` → `{ text }` | `ai.use` |
 | Memory | `GET /memory`, `DELETE /memory/:id` | `memory.own` |
@@ -1388,6 +1389,229 @@ Add these to `SUGGESTIONS` in `talk.tsx`, so people discover the assistant:
 2. Wait until 15 minutes before it: the phone pops "📅 Coming up: Reminder: parents meeting in 15 minutes." and the hub says it.
 3. As Ana, long-press that event → Delete → alert "Mom added that event, so only a parent can change it."
 4. As Mom: "Cancel the parents meeting" → "yes" → gone from Calendar.
+
+## 14. Google Calendar in Settings
+
+The events Jarvis adds for someone also go to **their own Google Calendar** (family events → a Family calendar). The
+hub does the copying. The app only needs a Settings section where each person connects their calendar. How it works,
+and the one-time setup: `docs/google-calendar.md`.
+
+Connecting takes three steps, so nobody can connect someone else's calendar:
+1. Share your Google Calendar with the hub's address (`shareWith`).
+2. Type your Gmail → Connect. The hub checks that the calendar is shared, then puts **"Jarvis code: 482913"** in it.
+3. Type that code → Verify. Only the calendar's owner can see the code. It works for 10 minutes and 5 tries.
+
+The hub's alerts explain what's missing ("Share that calendar with jarvis-hub@… first", "Wrong code…", "That calendar
+is already connected to another account").
+
+### 14.1 Types: add to `mobile/types.ts`
+
+```ts
+// GET /google. shareWith: the hub's Google address people share their calendar with. mine: my connected calendar.
+// pending: the calendar waiting for its one-time code ("Jarvis code: 482913" inside it). family: the Family calendar.
+export type GoogleStatus = {
+  enabled: boolean;
+  shareWith: string | null;
+  mine: string | null;
+  pending: string | null;
+  family: string | null;
+};
+```
+
+### 14.2 Hooks: add to the end of `mobile/hooks/useHub.ts`
+
+Also add `GoogleStatus` to the `import type { … } from '@/types'` line at the top.
+
+```ts
+// ---- Google Calendar (docs/google-calendar.md) ----
+// The events Jarvis adds also go to the person's own Google Calendar (family events → the Family calendar).
+// Connecting takes two steps, so nobody can connect someone else's calendar: useConnectGoogle(gmail) makes the hub put
+// "Jarvis code: 482913" in that calendar, then useVerifyGoogle(code) with the code the owner sees there.
+
+export const useGoogle = () => useQuery({ queryKey: ['google'], queryFn: () => api.get<GoogleStatus>('/google') });
+
+// Step 1. "" disconnects. Not shared with the hub → alert "Share that calendar with jarvis-hub@… first".
+export const useConnectGoogle = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (calendarId: string) => api.patch<GoogleStatus>('/google/me', { calendarId }),
+    onSuccess: (status) => qc.setQueryData(['google'], status),
+  });
+};
+
+// Step 2. Wrong code → alert "Wrong code…"; 5 wrong → start again.
+export const useVerifyGoogle = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (code: string) => api.patch<GoogleStatus>('/google/me/verify', { code }),
+    onSuccess: (status) => qc.setQueryData(['google'], status),
+  });
+};
+
+// Parents: the shared "Family" Google calendar for family events.
+export const useConnectFamilyGoogle = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (calendarId: string) => api.patch<GoogleStatus>('/google/family', { calendarId }),
+    onSuccess: (status) => qc.setQueryData(['google'], status),
+  });
+};
+```
+
+### 14.3 New file `mobile/components/GoogleCalendar.tsx`
+
+Put `<GoogleCalendar />` in **Settings**. It shows one of these:
+- "Not set up on the hub yet", when the hub has no Google key
+- the share step + Gmail + Connect
+- the code box + Verify
+- "Connected: …" with Disconnect
+
+Parents also see the Family calendar.
+
+```tsx
+import { useState } from 'react';
+import { Pressable, View } from 'react-native';
+import { Input } from '@/components/ui/input';
+import { Text } from '@/components/ui/text';
+import { useCan } from '@/hooks/useAuth';
+import { useConnectFamilyGoogle, useConnectGoogle, useGoogle, useVerifyGoogle } from '@/hooks/useHub';
+
+// Settings → "Google Calendar": the events Jarvis adds for you also show up in your own Google Calendar.
+// Connect = share your calendar with the hub, type your Gmail, then type the one-time code the hub puts in that
+// calendar ("Jarvis code: 482913"). Only the calendar's owner can see the code, so nobody can connect someone else's.
+export function GoogleCalendar() {
+  const can = useCan();
+  const { data: google } = useGoogle();
+  const connect = useConnectGoogle();
+  const verify = useVerifyGoogle();
+  const connectFamily = useConnectFamilyGoogle();
+  const [gmail, setGmail] = useState('');
+  const [code, setCode] = useState('');
+  const [family, setFamily] = useState('');
+
+  if (!google) return null;
+  if (!google.enabled) {
+    return (
+      <View className="gap-2">
+        <Text variant="label">Google Calendar</Text>
+        <Text variant="muted">Not set up on the hub yet.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View className="gap-3">
+      <Text variant="label">Google Calendar</Text>
+      {google.mine ? (
+        <>
+          <Text>Connected: {google.mine}</Text>
+          <Text variant="muted">The events Jarvis adds for you show up there too.</Text>
+          <Pressable testID="google-disconnect" onPress={() => connect.mutate('')}>
+            <Text className="text-destructive">Disconnect</Text>
+          </Pressable>
+        </>
+      ) : google.pending ? (
+        <>
+          <Text variant="muted">
+            3. Open Google Calendar ({google.pending}): Jarvis put an event "Jarvis code: ……" there today. Type the code:
+          </Text>
+          <Input
+            testID="google-code"
+            placeholder="6-digit code"
+            keyboardType="number-pad"
+            maxLength={6}
+            value={code}
+            onChangeText={setCode}
+          />
+          <Pressable
+            testID="google-verify"
+            disabled={code.trim().length !== 6 || verify.isPending}
+            onPress={() => verify.mutate(code, { onSuccess: () => setCode('') })}
+            className="rounded-3xl bg-primary p-3"
+          >
+            <Text className="text-center text-primary-foreground">Verify</Text>
+          </Pressable>
+          <Pressable testID="google-cancel" onPress={() => connect.mutate('')}>
+            <Text variant="muted">Cancel</Text>
+          </Pressable>
+        </>
+      ) : (
+        <>
+          <Text variant="muted">
+            1. In Google Calendar: Settings → your calendar → "Share with specific people" → add this address with "Make
+            changes to events":
+          </Text>
+          <Text selectable className="font-medium">
+            {google.shareWith}
+          </Text>
+          <Text variant="muted">2. Type your Gmail and tap Connect.</Text>
+          <Input
+            testID="google-gmail"
+            placeholder="you@gmail.com"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={gmail}
+            onChangeText={setGmail}
+          />
+          <Pressable
+            testID="google-connect"
+            disabled={!gmail.trim() || connect.isPending}
+            onPress={() => connect.mutate(gmail, { onSuccess: () => setGmail('') })}
+            className="rounded-3xl bg-primary p-3"
+          >
+            <Text className="text-center text-primary-foreground">{connect.isPending ? 'Checking…' : 'Connect'}</Text>
+          </Pressable>
+        </>
+      )}
+
+      {can('users.manage') && (
+        <View className="gap-2">
+          <Text variant="label">Family calendar (parents)</Text>
+          {google.family ? (
+            <>
+              <Text variant="muted">Family events go to {google.family}.</Text>
+              <Pressable testID="google-family-disconnect" onPress={() => connectFamily.mutate('')}>
+                <Text className="text-destructive">Disconnect the family calendar</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Text variant="muted">
+                Make a "Family" calendar in Google, share it the same way, and paste its Calendar ID (Settings → Integrate
+                calendar).
+              </Text>
+              <Input
+                testID="google-family"
+                placeholder="…@group.calendar.google.com"
+                autoCapitalize="none"
+                value={family}
+                onChangeText={setFamily}
+              />
+              <Pressable
+                testID="google-family-connect"
+                disabled={!family.trim() || connectFamily.isPending}
+                onPress={() => connectFamily.mutate(family, { onSuccess: () => setFamily('') })}
+                className="rounded-3xl bg-primary p-3"
+              >
+                <Text className="text-center text-primary-foreground">Connect family calendar</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+```
+
+### 14.4 Check it
+
+1. Settings → Google Calendar shows the `jarvis-hub@…` address. (On "Not set up on the hub yet": the hub needs its key.)
+2. Type a Gmail that wasn't shared → alert "Share that calendar with jarvis-hub@… first".
+3. Share it (calendar.google.com, "Make changes to events") → Connect → a "Jarvis code: ……" event appears in that
+   Google Calendar → type it → Verify → "Connected: you@gmail.com" (the code event disappears).
+4. Talk: "Add study group tomorrow at 3" → "yes" → within seconds it's in that Google Calendar (phone app too).
+5. On another account, try the same Gmail → alert "That calendar is already connected to another account".
 
 ---
 
