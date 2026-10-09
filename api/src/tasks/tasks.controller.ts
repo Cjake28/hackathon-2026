@@ -64,16 +64,29 @@ export class TasksController {
     return withName(task);
   }
 
-  // The assignee marks a non-chore task done: { status: "done" }. Chores are done by the AI photo check.
+  // The assignee checks a task or chore off: { status: "done" } ("pending" undoes it). No photo needed: the parents
+  // get a task:reviewed notice ("Ana finished: Wash the dishes") and see it done in GET /tasks?all=1.
   @Can('tasks.own')
   @Patch(':id')
-  async update(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
+  async update(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number, @Body() body?: { status?: 'done' | 'pending' }) {
     const task = await this.prisma.task.findUniqueOrThrow({ where: { id } });
     if (task.assigneeId !== user.id && !hasPermission(user.permissions, 'tasks.assign')) {
       throw new ForbiddenException('That task is for someone else');
     }
-    if (task.isChore) throw new BadRequestException('Chores are checked by photo: send a before and an after photo');
-    const saved = await this.prisma.task.update({ where: { id }, data: { status: 'done', doneAt: new Date() }, include: ASSIGNEE });
+    const done = body?.status !== 'pending';
+    const saved = await this.prisma.task.update({
+      where: { id },
+      data: { status: done ? 'done' : 'pending', doneAt: done ? new Date() : null },
+      include: ASSIGNEE,
+    });
+    if (done && task.status !== 'done') {
+      const parents = await this.prisma.user.findMany({ where: { role: { name: 'parent' } }, select: { id: true } });
+      for (const p of parents) {
+        if (p.id !== user.id) {
+          await notify(this.prisma, p.id, 'task:reviewed', `${saved.assignee.name} finished: ${saved.title}`, { taskId: id, status: 'done' });
+        }
+      }
+    }
     return withName(saved);
   }
 
