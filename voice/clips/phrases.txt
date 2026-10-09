@@ -1,0 +1,15 @@
+# One phrase per line -> clips/<sha1(lowercased text)>.wav (python pregen.py). Must match the hub's text exactly.
+I don't recognize your voice, so I can't share family info.
+Mom, wake up!
+Dad, wake up!
+Ana, wake up!
+Ben, wake up!
+Welcome home, Mom
+Welcome home, Dad
+Welcome home, Ana
+Welcome home, Ben
+Ana, Mom gave you a task: clean your room
+Ben, Mom gave you a task: wash the dishes
+Ana, Dad gave you a task: feed the dog
+Ben, Dad gave you a task: take out the trash
+mock reply
