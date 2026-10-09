@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, streamWithHeader } from '@/lib/api';
-import type { Conversation, ConversationMessage, ConversationWithMessages, Source } from '@/types';
+import type {
+  Conversation,
+  ConversationMessage,
+  ConversationWithMessages,
+  PendingAction,
+  Source,
+} from '@/types';
 
 // Saved AI chats (per user).
 export const useConversations = () =>
@@ -63,16 +69,29 @@ export function useSendMessage() {
       const reply = (change: (m: ConversationMessage) => ConversationMessage) =>
         edit((m) => m.map((x) => (x.id === -2 ? change(x) : x)));
 
-      await streamWithHeader<{ sources: Source[] }>(
+      await streamWithHeader<{ sources: Source[]; action?: PendingAction }>(
         `/conversations/${id}/messages`,
         { content, image },
-        ({ sources }) => reply((x) => ({ ...x, sources })),
+        ({ sources, action }) => reply((x) => ({ ...x, sources, action: action ?? null })),
         (text) => reply((x) => ({ ...x, content: x.content + text })),
       );
     },
     onSettled: (_data, _error, { id }) => {
       qc.invalidateQueries({ queryKey: ['conversation', id] });
       qc.invalidateQueries({ queryKey: ['conversations'] });
+    },
+  });
+}
+
+// Confirm or cancel an action the AI proposed ("Allow app actions"). Data it changed is reloaded.
+export function useResolveAction(conversationId?: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ messageId, approve }: { messageId: number; approve: boolean }) =>
+      api.post(`/conversations/${conversationId}/messages/${messageId}/action`, { approve }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+      qc.invalidateQueries({ queryKey: ['items'] }); // add the query keys your own tools change
     },
   });
 }

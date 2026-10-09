@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   NotFoundException,
   Param,
@@ -13,9 +14,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Prisma } from '@prisma/client';
 import type { FastifyReply } from 'fastify';
-import { AiService, type ChatMessage } from '../ai/ai.service';
+import { AiService, type AiMessage, type ChatMessage } from '../ai/ai.service';
 import { sendStream } from '../ai/send-stream';
+import { runTool, toolSpecs, toolsFor } from '../ai/tools';
 import { Can, CurrentUser } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.guard';
 import { PrismaService } from '../prisma.service';
@@ -29,9 +32,12 @@ const WITH_DOCS = [
   "If they don't cover it, say the documents don't cover it before answering from general knowledge.",
   "Never paste the sources' text into your answer.",
 ].join(' ');
+const WITH_TOOLS =
+  'You can use tools to look things up or change data in this app. Use a tool only when the user asks for something it does. After using tools, answer in one or two sentences.';
 const MAX_IMAGE_MB = 4;
 
 type ConversationInput = { title?: string; useDocs?: boolean; useTools?: boolean };
+type PendingAction = { tool: string; args: unknown; description: string; status: 'pending' | 'done' | 'cancelled' };
 
 // Saved AI chats, one list per user. Sending a message streams the reply:
 // first line JSON { sources }, then the answer text (read by useSendMessage in hooks/useConversations.ts).
@@ -132,6 +138,15 @@ export class ConversationsController {
       if (found.context) system += `\n\n${WITH_DOCS}\n\n${found.context}`;
     }
 
+    // "Allow app actions": the AI may use tools (api/src/ai/tools.ts). Not streamed: tool steps run first.
+    if (conversation.useTools) {
+      const { text, action } = await this.agentReply(history, `${system}\n\n${WITH_TOOLS}`, user);
+      await this.prisma.conversationMessage.create({
+        data: { conversationId: id, role: 'assistant', content: text, sources, action: action as Prisma.InputJsonValue },
+      });
+      return sendStream(reply, once(text), `${JSON.stringify({ sources, action })}\n`);
+    }
+
     const answer = saveWhenDone(this.ai.chat(history, system), (text) =>
       this.prisma.conversationMessage.create({
         data: { conversationId: id, role: 'assistant', content: text, sources },
@@ -140,11 +155,76 @@ export class ConversationsController {
     return sendStream(reply, answer, `${JSON.stringify({ sources })}\n`);
   }
 
+  // Confirm or cancel a tool action the AI proposed. Body: { approve: boolean }. Returns the new note message.
+  @Post(':id/messages/:messageId/action')
+  async resolveAction(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('messageId', ParseIntPipe) messageId: number,
+    @Body() body: { approve: boolean },
+  ) {
+    await this.own(user, id);
+    const message = await this.prisma.conversationMessage.findFirst({ where: { id: messageId, conversationId: id } });
+    const action = message?.action as PendingAction | null | undefined;
+    if (!action || action.status !== 'pending') throw new BadRequestException('There is nothing to confirm');
+
+    let status: PendingAction['status'] = 'cancelled';
+    let note = `Cancelled: ${action.description}.`;
+    if (body.approve) {
+      // Permissions are checked again now, not when the AI proposed it.
+      const tool = toolsFor(user).find((t) => t.name === action.tool);
+      if (!tool) throw new ForbiddenException('You are not allowed to do that');
+      await runTool(tool, action.args, { prisma: this.prisma, rag: this.rag, user });
+      status = 'done';
+      note = `Done: ${action.description}.`;
+    }
+    await this.prisma.conversationMessage.update({
+      where: { id: messageId },
+      data: { action: { ...action, status } as Prisma.InputJsonValue },
+    });
+    return this.prisma.conversationMessage.create({ data: { conversationId: id, role: 'assistant', content: note } });
+  }
+
+  // Tool loop: the AI calls read-only tools as needed (up to 5 steps). A tool that changes data stops the loop
+  // and comes back as a pending action for the user to confirm.
+  private async agentReply(history: ChatMessage[], system: string, user: AuthUser) {
+    const tools = toolsFor(user);
+    const messages: AiMessage[] = [{ role: 'system', content: system }, ...history];
+    for (let step = 0; step < 5; step++) {
+      const reply = await this.ai.toolStep(messages, toolSpecs(tools));
+      const calls = reply.tool_calls ?? [];
+      if (!calls.length) return { text: reply.content.trim() || 'Done.' };
+      messages.push(reply);
+
+      for (const call of calls) {
+        const tool = tools.find((t) => t.name === call.function.name);
+        const args = tool?.params.safeParse(call.function.arguments);
+        if (!tool || !args?.success) {
+          messages.push({ role: 'tool', tool_name: call.function.name, content: 'Error: unknown tool or invalid arguments.' });
+          continue;
+        }
+        if (tool.confirm) {
+          const description = (tool.describe as ((a: unknown) => string) | undefined)?.(args.data) ?? tool.name;
+          const action: PendingAction = { tool: tool.name, args: args.data, description, status: 'pending' };
+          return { text: `I'd like to: ${description}. Tap Confirm to go ahead.`, action };
+        }
+        const result = await runTool(tool, args.data, { prisma: this.prisma, rag: this.rag, user });
+        const content = typeof result === 'string' ? result : JSON.stringify(result);
+        messages.push({ role: 'tool', tool_name: tool.name, content: content.slice(0, 6000) });
+      }
+    }
+    return { text: 'I stopped after 5 steps. Try asking for one thing at a time.' };
+  }
+
   private async own(user: AuthUser, id: number) {
     const conversation = await this.prisma.conversation.findFirst({ where: { id, userId: user.id } });
     if (!conversation) throw new NotFoundException('Conversation not found');
     return conversation;
   }
+}
+
+async function* once(text: string) {
+  yield text;
 }
 
 // Passes the answer through and saves it when it ends (also when the user leaves mid-answer).

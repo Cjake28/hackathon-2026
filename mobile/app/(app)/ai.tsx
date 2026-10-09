@@ -12,6 +12,7 @@ import {
   useConversation,
   useConversations,
   useCreateConversation,
+  useResolveAction,
   useSendMessage,
   useUpdateConversation,
 } from '@/hooks/useConversations';
@@ -29,22 +30,24 @@ export default function AiChatScreen() {
   const create = useCreateConversation();
   const update = useUpdateConversation();
   const send = useSendMessage();
+  const resolve = useResolveAction(conversation?.id);
   const speech = useSpeech();
   const [input, setInput] = useState('');
   const [image, setImage] = useState<string | null>(null);
-  const [newChatDocs, setNewChatDocs] = useState(false);
+  // Settings for a chat that doesn't exist yet (it's created on the first message).
+  const [newChat, setNewChat] = useState({ useDocs: false, useTools: false });
   const messages = useRef<FlatList<ConversationMessage>>(null);
 
-  const useDocs = conversation ? conversation.useDocs : newChatDocs;
-  const setUseDocs = (on: boolean) =>
-    conversation ? update.mutate({ id: conversation.id, useDocs: on }) : setNewChatDocs(on);
+  const settings = conversation ?? newChat;
+  const setSetting = (key: 'useDocs' | 'useTools', on: boolean) =>
+    conversation ? update.mutate({ id: conversation.id, [key]: on }) : setNewChat({ ...newChat, [key]: on });
 
   const submit = async () => {
     const content = input.trim();
     if (!content || send.isPending) return;
     let id = conversation?.id;
     if (!id) {
-      id = (await create.mutateAsync({ useDocs: newChatDocs })).id;
+      id = (await create.mutateAsync(newChat)).id;
       setPicked(id);
     }
     send.mutate({ id, content, image: image ?? undefined });
@@ -73,10 +76,18 @@ export default function AiChatScreen() {
             </Button>
           ))}
         </ScrollView>
-        <Pressable className="flex-row items-center gap-2" onPress={() => setUseDocs(!useDocs)}>
-          <Checkbox checked={useDocs} onCheckedChange={setUseDocs} />
-          <Text className="text-sm">Use my documents</Text>
-        </Pressable>
+        <View className="flex-row flex-wrap gap-4">
+          <Pressable className="flex-row items-center gap-2" onPress={() => setSetting('useDocs', !settings.useDocs)}>
+            <Checkbox checked={settings.useDocs} onCheckedChange={(on) => setSetting('useDocs', on)} />
+            <Text className="text-sm">Use my documents</Text>
+          </Pressable>
+          {status?.tools && (
+            <Pressable className="flex-row items-center gap-2" onPress={() => setSetting('useTools', !settings.useTools)}>
+              <Checkbox checked={settings.useTools} onCheckedChange={(on) => setSetting('useTools', on)} />
+              <Text className="text-sm">Allow app actions</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
 
       <FlatList
@@ -91,6 +102,8 @@ export default function AiChatScreen() {
             message={item}
             speaking={speech.speakingId === item.id}
             onSpeak={() => speech.toggle(item.id, item.content)}
+            onResolve={(approve) => resolve.mutate({ messageId: item.id, approve })}
+            resolving={resolve.isPending}
           />
         )}
       />
@@ -131,7 +144,13 @@ export default function AiChatScreen() {
   );
 }
 
-function MessageBubble(props: { message: ConversationMessage; speaking: boolean; onSpeak: () => void }) {
+function MessageBubble(props: {
+  message: ConversationMessage;
+  speaking: boolean;
+  onSpeak: () => void;
+  onResolve: (approve: boolean) => void;
+  resolving: boolean;
+}) {
   const { message: m } = props;
   const mine = m.role === 'user';
 
@@ -147,6 +166,25 @@ function MessageBubble(props: { message: ConversationMessage; speaking: boolean;
         <Text className="text-xs text-muted-foreground">
           {m.sources.map((s) => `[${s.n}] ${s.title}${s.page ? ` p.${s.page}` : ''}`).join('  ')}
         </Text>
+      )}
+      {m.action && (
+        <View className="gap-2 rounded-lg border border-border p-3">
+          <Text className="text-sm font-medium">{m.action.description}</Text>
+          {m.action.status === 'pending' && m.id > 0 ? (
+            <View className="flex-row gap-2">
+              <Button testID="action-confirm" size="sm" disabled={props.resolving} onPress={() => props.onResolve(true)}>
+                <Text>Confirm</Text>
+              </Button>
+              <Button testID="action-cancel" size="sm" variant="outline" disabled={props.resolving} onPress={() => props.onResolve(false)}>
+                <Text>Cancel</Text>
+              </Button>
+            </View>
+          ) : (
+            <Text className="text-xs text-muted-foreground">
+              {m.action.status === 'done' ? 'Done' : m.action.status === 'cancelled' ? 'Cancelled' : 'Waiting…'}
+            </Text>
+          )}
+        </View>
       )}
       {!mine && !!m.content && (
         <Button variant="ghost" size="sm" className="self-start" onPress={props.onSpeak}>

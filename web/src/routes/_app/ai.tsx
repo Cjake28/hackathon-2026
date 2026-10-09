@@ -18,6 +18,7 @@ import {
   useConversations,
   useCreateConversation,
   useDeleteConversation,
+  useResolveAction,
   useSendMessage,
   useUpdateConversation,
 } from '@/hooks/useConversations';
@@ -92,25 +93,27 @@ function ChatPanel({ conversationId, onSelect }: { conversationId?: number; onSe
   const create = useCreateConversation();
   const update = useUpdateConversation();
   const send = useSendMessage();
+  const resolve = useResolveAction(conversation?.id);
   const speech = useSpeech();
   const [input, setInput] = useState('');
   const [image, setImage] = useState<string | null>(null);
-  const [newChatDocs, setNewChatDocs] = useState(false); // settings for a chat that doesn't exist yet
+  // Settings for a chat that doesn't exist yet (it's created on the first message).
+  const [newChat, setNewChat] = useState({ useDocs: false, useTools: false });
   const fileInput = useRef<HTMLInputElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [conversation?.messages]);
 
-  const useDocs = conversation ? conversation.useDocs : newChatDocs;
-  const setUseDocs = (on: boolean) =>
-    conversation ? update.mutate({ id: conversation.id, useDocs: on }) : setNewChatDocs(on);
+  const settings = conversation ?? newChat;
+  const setSetting = (key: 'useDocs' | 'useTools', on: boolean) =>
+    conversation ? update.mutate({ id: conversation.id, [key]: on }) : setNewChat({ ...newChat, [key]: on });
 
   const submit = async () => {
     const content = input.trim();
     if (!content || send.isPending) return;
     let id = conversation?.id;
     if (!id) {
-      id = (await create.mutateAsync({ useDocs: newChatDocs })).id;
+      id = (await create.mutateAsync(newChat)).id;
       onSelect(id);
     }
     send.mutate({ id, content, image: image ?? undefined });
@@ -127,9 +130,15 @@ function ChatPanel({ conversationId, onSelect }: { conversationId?: number; onSe
         </div>
         <div className="flex items-center gap-3">
           <Label className="font-normal">
-            <Checkbox checked={useDocs} onCheckedChange={(on) => setUseDocs(on === true)} />
+            <Checkbox checked={settings.useDocs} onCheckedChange={(on) => setSetting('useDocs', on === true)} />
             Use my documents
           </Label>
+          {status?.tools && (
+            <Label className="font-normal" title="The AI can look things up and propose changes; you confirm each change.">
+              <Checkbox checked={settings.useTools} onCheckedChange={(on) => setSetting('useTools', on === true)} />
+              Allow app actions
+            </Label>
+          )}
           {/* Small screens: the chat list lives in a menu. */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -154,7 +163,7 @@ function ChatPanel({ conversationId, onSelect }: { conversationId?: number; onSe
       <div className="flex-1 space-y-3 overflow-y-auto rounded-lg border p-4">
         {!conversation?.messages.length && (
           <p className="text-center text-sm text-muted-foreground">
-            Ask anything to start.{useDocs ? ' Answers will use your documents.' : ''}
+            Ask anything to start.{settings.useDocs ? ' Answers will use your documents.' : ''}
           </p>
         )}
         {conversation?.messages.map((m) => (
@@ -163,6 +172,8 @@ function ChatPanel({ conversationId, onSelect }: { conversationId?: number; onSe
             message={m}
             speaking={speech.speakingId === m.id}
             onSpeak={speech.supported ? () => speech.toggle(m.id, m.content) : undefined}
+            onResolve={(approve) => resolve.mutate({ messageId: m.id, approve })}
+            resolving={resolve.isPending}
           />
         ))}
         <div ref={bottom} />
@@ -229,7 +240,13 @@ function ChatPanel({ conversationId, onSelect }: { conversationId?: number; onSe
   );
 }
 
-function MessageBubble(props: { message: ConversationMessage; speaking: boolean; onSpeak?: () => void }) {
+function MessageBubble(props: {
+  message: ConversationMessage;
+  speaking: boolean;
+  onSpeak?: () => void;
+  onResolve: (approve: boolean) => void;
+  resolving: boolean;
+}) {
   const { message: m } = props;
   const mine = m.role === 'user';
 
@@ -252,6 +269,25 @@ function MessageBubble(props: { message: ConversationMessage; speaking: boolean;
               {s.page ? ` · page ${s.page}` : ''}
             </p>
           ))}
+        </div>
+      )}
+      {m.action && (
+        <div className="space-y-2 rounded-lg border p-3 text-sm">
+          <p className="font-medium">{m.action.description}</p>
+          {m.action.status === 'pending' && m.id > 0 ? (
+            <div className="flex gap-2">
+              <Button size="sm" disabled={props.resolving} onClick={() => props.onResolve(true)}>
+                Confirm
+              </Button>
+              <Button size="sm" variant="outline" disabled={props.resolving} onClick={() => props.onResolve(false)}>
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {m.action.status === 'done' ? 'Done' : m.action.status === 'cancelled' ? 'Cancelled' : 'Waiting…'}
+            </p>
+          )}
         </div>
       )}
       {!mine && m.content && props.onSpeak && (

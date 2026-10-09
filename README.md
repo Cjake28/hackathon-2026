@@ -6,7 +6,10 @@ Wi-Fi or LAN open it in a browser. No cloud services, no internet needed once it
 - **api/**: NestJS (Fastify) + Prisma + PostgreSQL/pgvector
 - **web/**: React + Vite + TanStack Query/Router + shadcn/ui (works in phone browsers too)
 - **mobile/**: Expo + Expo Router + React Native Reusables + TanStack Query (optional)
-- **AI**: [Ollama](https://ollama.com) on the hub — streaming chat, structured JSON output, "Generate with AI" example
+- **AI**: [Ollama](https://ollama.com) on the hub — structured JSON output, "Generate with AI" example
+- **AI Chat**: saved conversations per user, optionally answering from your documents (with sources), questions about
+  a picture (camera/gallery), read-aloud answers, and **app actions**: the AI can look things up and propose changes
+  (e.g. create to-do items) that run only after you tap Confirm
 - **RAG**: ask questions about your own documents (PDF/TXT/MD), answers with sources
 - **Auth**: email + password, permission-based roles (admin, user, your own)
 

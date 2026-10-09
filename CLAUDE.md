@@ -49,15 +49,33 @@
 - Every AI call goes through `api/src/ai/ai.service.ts` — inject `AiService` in any controller:
   - `ai.text(prompt, system?)` → string
   - `ai.json(prompt, zodSchema, system?)` → typed object (structured output; use this for extract/classify/generate)
-  - `ai.chat(messages, system?)` → streamed text (see `ai.controller.ts`)
+  - `ai.chat(messages, system?)` → streamed text; a message can carry `images` (base64) for vision models
+  - `ai.textStream(prompt, system?)` → streamed factual text
   - `ai.embed(texts, 'document' | 'query')` → vectors (RAG)
+  - `ai.toolStep(messages, tools)` → one tool-calling step (used by the chat's app actions)
 - Example AI feature to copy: `suggest()` in `api/src/items/items.controller.ts` + `useSuggestItems` + the
   "Generate with AI" dialog in `web/src/routes/_app/items.tsx`.
 - AI endpoints: `@Can('ai.use')` + `@UseGuards(ThrottlerGuard)` — the hub's AI is shared, slow and runs one answer at a time.
 - Streaming to the UI: `ai.chat()` / `ai.textStream()` + `sendStream()` (`api/src/ai/send-stream.ts`) on the API,
   `streamText()` in `lib/api.ts` on the client (web: fetch, mobile: expo/fetch), see `hooks/useAi.ts`.
   Small local models are slow: stream anything longer than a sentence.
-- `<AiStatus />` shows whether Ollama is running and the models are downloaded (`GET /api/ai/status`).
+- `<AiStatus />` shows whether Ollama is running and the models are downloaded (`GET /api/ai/status`, which also
+  says whether the model can read pictures: `vision`, and use tools: `tools`).
+
+## AI Chat (already built) — saved conversations
+- API: `api/src/conversations/conversations.controller.ts`. UI: `web/src/routes/_app/ai.tsx`, `mobile/app/(app)/ai.tsx`,
+  hooks in `hooks/useConversations.ts`. Each user has their own chats; the last 20 messages are the AI's context.
+- Per chat: "Use my documents" (`useDocs`: RAG sources go into the prompt, answers cite [1]) and
+  "Allow app actions" (`useTools`: the AI can use tools). Pictures: web `imageToBase64()`, mobile `pickImage()`;
+  only shown when `status.vision`. Read aloud: `useSpeech()` (device voices, offline).
+- Change the assistant's personality/language in `SYSTEM` at the top of the controller.
+
+## App actions (AI tools) — `api/src/ai/tools.ts`
+- Add a tool to `TOOLS` with `tool({ name, description, params: z.object(...), permission, confirm, describe, run })`.
+- `confirm: false` only for read-only tools (they run right away). Anything that creates, changes or deletes data
+  must be `confirm: true`: the AI only proposes it, the user taps Confirm, then `run()` executes (permission re-checked).
+- Users only get tools whose `permission` their role has. Keep tools few and descriptions short (small models).
+- When a confirmed tool changes other data, add its query key to `useResolveAction` in `hooks/useConversations.ts`.
 - Models are set in `api/.env` (`AI_MODEL`, `AI_EMBEDDING_MODEL`). Don't hardcode model names.
 - Small local models: keep prompts short and specific, ask for JSON with `ai.json` instead of parsing text,
   and give them the facts (RAG) instead of trusting what they "know". Zod is for AI schemas, not request validation.
