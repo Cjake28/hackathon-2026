@@ -1,0 +1,22 @@
+# Install into the shared venv: C:\Users\sudo\Desktop\voice-venv\Scripts\python.exe -m pip install -r requirements.txt
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchaudio
+numpy
+sounddevice
+soundfile
+requests
+python-dotenv
+# speech-to-text (offline fallback; ElevenLabs Scribe is online)
+faster-whisper
+# wake word
+openwakeword
+onnxruntime
+# voice ID
+speechbrain
+# text-to-speech (offline fallbacks; ElevenLabs is online)
+kokoro-onnx
+pyttsx3
+# /speak + /health server
+fastapi
+uvicorn
