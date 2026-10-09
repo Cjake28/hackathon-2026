@@ -14,6 +14,10 @@ FRAME_S = FRAME / config.SAMPLE_RATE
 SILENCE_RMS = 0.01  # minimum threshold; the real one follows the room's noise floor
 NOISE_X = 2.5  # speech = louder than NOISE_X * noise floor
 SILENCE_S = 1.0  # stop after this much silence once speech started
+# Background talk in a hall never goes silent, so "1 s of silence" never came and every recording ran the full 8 s,
+# picking up other people. Once someone is speaking, anything below END_RATIO of their own loudness also counts as
+# quiet: they're close to the mic, the room is farther away (TEAM-PLAN, Voice: background voices).
+END_RATIO = 0.5
 START_S = 5.0  # give up if no speech starts within this
 
 _frames: queue.Queue = queue.Queue(maxsize=int(10 / FRAME_S))  # last ~10 s
@@ -69,12 +73,16 @@ def record(max_s: float = 8) -> np.ndarray:
     level = threshold()
     print('  listening...')
     chunks, quiet, heard, loud, peak = [], 0.0, False, 0, 0.0
+    voice: list[float] = []  # loudness of the frames that were speech: how loud this speaker is
     while len(chunks) * FRAME_S < max_s:
         block = frame()
         chunks.append(block)
         rms = float(np.sqrt(np.mean(block ** 2)))
         peak = max(peak, rms)
-        if rms > level:
+        # 75th percentile: the speaker's own loud frames, not the background ones caught before they started
+        speaking_level = max(level, END_RATIO * float(np.percentile(voice, 75))) if heard else level
+        if rms > speaking_level:
+            voice.append(rms)
             loud += 1
             heard = heard or loud >= 5  # 0.4 s of sound = speech, not a click or a cough
             quiet = 0.0
