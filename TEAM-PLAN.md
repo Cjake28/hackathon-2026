@@ -561,6 +561,16 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
 5. **Loop:** wake/PTT → record → transcribe + identify → `POST /voice/command` → speak `reply`.
    Feel instant: a short beep when the person stops talking (Jarvis takes 1–3 s to answer), and save the audio of fixed
    lines ("Say yes to confirm", "Okay, cancelled", "Ana, wake up!") so they play right away.
+   **Thinking sound (decided, replaces the beep):** the moment someone stops talking, Jarvis says a short filler from a
+   pre-recorded clip while the ears and the brain work, so the wait sounds like thinking, not freezing (offline Whisper
+   takes ~4 s). Add to `clips/phrases.txt` and run `python pregen.py` (Jarvis's ElevenLabs voice, plays offline too):
+   `Hmm.` · `Okay.` · `Sige.` · `Let me check.` In `main.py`, right after `clip = audio.record()` (non-empty), before
+   `stt.transcribe`: `tts.say(random.choice(FILLERS))`. `tts.say()` only queues, so the filler plays while speech-to-text
+   and `/voice/command` run, and the reply plays right after it. Skip it when the last reply was a question waiting for
+   yes/no (`res['pending']`): that answer comes back in 0.3 s anyway.
+   **Measured on the hub laptop** (10 demo lines, synthetic voice): ElevenLabs Scribe 91% right, 1.0 s, Tagalog perfect ·
+   Whisper `small` 74%, 4.0 s, Tagalog unusable · Whisper `base` 77%, 1.4 s, but heard "eggs" as "X". Decision: Scribe
+   when online, `small` as the offline backup (unchanged).
    **Mute the mic while speaking**, or Jarvis hears itself.
 6. **`/speak` server** (FastAPI or `http.server`) with a queue and one TTS thread (pyttsx3 isn't thread-safe).
 7. **Stage fallback:** keys `1`–`5` force the next speaker, `0` = automatic.
