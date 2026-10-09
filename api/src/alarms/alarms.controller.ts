@@ -11,10 +11,12 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { AiService } from '../ai/ai.service';
 import { alarmICanChange } from '../ai/tools';
 import { Can, CurrentUser } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.guard';
 import { hasPermission } from '../auth/permissions';
+import { briefOnWakeUp, isWakeUp } from '../briefing/wake-briefing';
 import { assertCanActFor, nextAt } from '../family';
 import { PrismaService } from '../prisma.service';
 import { stopRinging } from '../scheduler.service';
@@ -37,7 +39,10 @@ const validTime = (t?: string) => !!t && /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
 @Controller('alarms')
 @Can('alarms.own')
 export class AlarmsController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private ai: AiService, // Brain: wake-up briefing on dismiss
+  ) {}
 
   // Mine; ?userId= (someone else: alarms.family); ?all=1 (alarms.family) → Alarm[]
   @Get()
@@ -103,6 +108,7 @@ export class AlarmsController {
   @Post(':id/dismiss')
   async dismiss(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     const alarm = await this.ringsFor(user, id);
+    if (alarm.ringingAt && isWakeUp(alarm)) briefOnWakeUp(this.prisma, this.ai, alarm.userId); // Brain: good-morning briefing
     return this.prisma.alarm.update({ where: { id }, data: stopRinging(alarm) });
   }
 

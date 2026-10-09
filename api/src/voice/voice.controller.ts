@@ -25,7 +25,10 @@ import { PrismaService } from '../prisma.service';
 import { RagService } from '../rag/rag.service';
 
 type VoiceCommand = { speakerId: number | null; confidence: number; text: string };
-type PendingAction = { tool: string; args: unknown; description: string; status: 'pending' | 'done' | 'cancelled' };
+type Step = { tool: string; args: unknown; description: string; undo?: number[] }; // undo: ids it created
+// One "Say yes" can cover several changes: the first in tool/args, the rest in `also` (the web chat's Confirm card reads
+// tool/args/description/status, so a single action looks exactly as before).
+type PendingAction = Step & { status: 'pending' | 'done' | 'cancelled' | 'undone'; also?: Step[] };
 type Answer = { text: string; action?: PendingAction };
 
 const GUEST_EMAIL = 'guest@family.local'; // every unknown voice speaks as this user (seed.ts)
@@ -40,6 +43,20 @@ const BRAIN_SLOW = "Sorry, I'm still waking up. Ask me again in a few seconds.";
 let stuckTurns = 0;
 const YES = /^(yes|yeah|yep|yup|oo|opo|oho|sige|go|okay|ok|confirm|sure|do it|tama)\b/i;
 const NO = /^(no|nope|hindi|huwag|wag|cancel|stop|never mind|ayaw)\b/i;
+// "Cancel that" right after "Done!": undo what the action created, within UNDO_SECONDS.
+// The whole sentence only: "cancel that alarm" is a different request.
+const UNDO =
+  /^(hey )?(jarvis )?(cancel that|undo( that)?|never ?mind|take (that|it) back|bawiin( mo)?|huwag na|wag na|i changed my mind)( please| po| na lang)?$/i;
+const UNDO_SECONDS = 180;
+// The actions that can be undone, and how (tools whose run() returns the created row or rows).
+const UNDOERS: Record<string, (prisma: PrismaService, ids: number[]) => Promise<unknown>> = {
+  set_alarm: (p, ids) => p.alarm.deleteMany({ where: { id: { in: ids } } }),
+  give_task: (p, ids) => p.task.deleteMany({ where: { id: { in: ids } } }),
+  create_items: (p, ids) => p.item.deleteMany({ where: { id: { in: ids } } }),
+  add_event: (p, ids) => p.event.deleteMany({ where: { id: { in: ids } } }),
+  add_expense: (p, ids) => p.expense.deleteMany({ where: { id: { in: ids } } }),
+  remember: (p, ids) => p.memoryNote.deleteMany({ where: { id: { in: ids } } }),
+};
 const CONFIRM_SECONDS = 60; // a proposed action waits this long for "yes"
 // A guest asking about the family always gets this exact sentence: never leaks anything, and matches the Voice dev's
 // pre-recorded clip (voice/clips/phrases.txt), so it plays instantly. General questions still go to the AI.
@@ -115,6 +132,7 @@ export class VoiceController {
 
     const answer =
       (await this.confirmByVoice(user, conversation.id, text)) ??
+      (await this.undoByVoice(conversation.id, text)) ??
       (stuckTurns > 0 ? { text: BRAIN_SLOW } : null) ??
       (await withTimeout(
         this.think(user, conversation.id, text).catch((error) => {
@@ -159,23 +177,50 @@ export class VoiceController {
     const approve = fresh && YES.test(word);
     let status: PendingAction['status'] = 'cancelled';
     let answer: Answer | null = fresh && NO.test(word) ? { text: 'Okay, cancelled.' } : null;
+    const created: (number[] | undefined)[] = []; // per step: the ids it created (for "cancel that")
 
     if (approve) {
-      const tool = toolsFor(user).find((t) => t.name === action.tool);
       try {
-        if (!tool) throw new ForbiddenException("you're not allowed to do that.");
-        await runTool(tool, action.args, { prisma: this.prisma, rag: this.rag, user });
-        status = 'done';
+        for (const step of [action, ...(action.also ?? [])]) {
+          // Permissions are checked again now, not when the AI proposed it.
+          const tool = toolsFor(user).find((t) => t.name === step.tool);
+          if (!tool) throw new ForbiddenException("you're not allowed to do that.");
+          const result = await runTool(tool, step.args, { prisma: this.prisma, rag: this.rag, user });
+          created.push(UNDOERS[step.tool] ? (Array.isArray(result) ? result : [result]).map((r: { id: number }) => r.id) : undefined);
+          status = 'done'; // even if a later step fails, the ones that ran stay undoable
+        }
         answer = { text: `Done! ${action.description}.` };
       } catch (error) {
         answer = { text: this.sorry(user, error) };
       }
     }
+    const also = action.also?.map((step, i) => ({ ...step, undo: created[i + 1] }));
     await this.prisma.conversationMessage.update({
       where: { id: last.id },
-      data: { action: { ...action, status } as Prisma.InputJsonValue },
+      data: { action: { ...action, status, undo: created[0], ...(also ? { also } : {}) } as Prisma.InputJsonValue },
     });
     return answer;
+  }
+
+  // "Cancel that" / "bawiin mo": undoes the speaker's own last confirmed action (an alarm, task, grocery items, event,
+  // expense or memory) if it was in the last UNDO_SECONDS. Returns null when it isn't an undo request.
+  private async undoByVoice(conversationId: number, text: string): Promise<Answer | null> {
+    if (!UNDO.test(text.toLowerCase().replace(/[^\p{L}\s]/gu, '').trim())) return null;
+    const recent = await this.prisma.conversationMessage.findMany({
+      where: { conversationId, role: 'assistant', createdAt: { gte: new Date(Date.now() - UNDO_SECONDS * 1000) } },
+      orderBy: { id: 'desc' },
+      take: 4,
+    });
+    const done = recent.find((m) => (m.action as PendingAction | null)?.status === 'done');
+    const action = done?.action as PendingAction | undefined;
+    const steps = action ? [action, ...(action.also ?? [])].filter((s) => s.undo?.length && UNDOERS[s.tool]) : [];
+    if (!done || !action || !steps.length) return { text: "There's nothing I can undo right now." };
+    for (const step of steps) await UNDOERS[step.tool](this.prisma, step.undo!);
+    await this.prisma.conversationMessage.update({
+      where: { id: done.id },
+      data: { action: { ...action, status: 'undone' } as Prisma.InputJsonValue },
+    });
+    return { text: `Okay, undone: ${action.description}.` };
   }
 
   // The AI answers, using tools (up to 5 steps). A tool that changes data stops the loop and comes back as a
@@ -189,12 +234,13 @@ export class VoiceController {
     const tools = guest ? [] : toolsFor(user).filter((t) => t.name !== 'search_documents');
     const deps = { prisma: this.prisma, rag: this.rag, user };
 
-    // Earlier messages only when Jarvis just asked something ("Which alarm?"): otherwise the small model copies old
-    // answers ("Ana is at school") instead of calling the tool again.
+    // Earlier messages only when Jarvis just asked something ("Which alarm?"), and only that one exchange: the small
+    // model copies old answers ("Ana is at school", even "Done! Remember: …" without saving anything) instead of
+    // calling the tool again.
     const recent = await this.prisma.conversationMessage.findMany({
       where: { conversationId, createdAt: { gte: new Date(Date.now() - RECENT_MINUTES * 60_000) } },
       orderBy: { id: 'desc' },
-      take: 8,
+      take: 2,
     });
     const followUp = recent[0]?.role === 'assistant' && recent[0].content.trim().endsWith('?') && !recent[0].action;
     const history: ChatMessage[] = [
@@ -214,9 +260,16 @@ export class VoiceController {
       for (let step = 0; step < 5; step++) {
         const reply = await this.ai.toolStep(messages, toolSpecs(tools));
         const calls = reply.tool_calls ?? [];
-        if (!calls.length) return { text: spoken(reply.content) || 'Okay.' };
+        if (!calls.length) {
+          // Only this code says "Done!", after an action really ran. The model saying it means it pretended.
+          if (/^\W*(done|tapos na)\b/i.test(reply.content)) return { text: 'Sorry, could you say that again?' };
+          return { text: spoken(reply.content) || 'Okay.' };
+        }
         messages.push(reply);
 
+        // "Give Ana the dishes and remind her in 10 minutes": the model asks for both in one step. Every change is
+        // collected and proposed together (one "Say yes"); before, the second one was silently dropped.
+        const proposals: Step[] = [];
         for (const call of calls) {
           const tool = tools.find((t) => t.name === call.function.name);
           const args = tool?.params.safeParse(call.function.arguments);
@@ -225,20 +278,29 @@ export class VoiceController {
             continue;
           }
           if (tool.confirm) {
-            await checkTool(tool, args.data, deps);
+            await checkTool(tool, args.data, deps); // a refusal stops the whole request (spoken below)
             // Trailing punctuation off ("Aalis na ako." would become "Aalis na ako.? Say yes").
             const description = ((tool.describe as ((a: unknown) => string) | undefined)?.(args.data) ?? tool.name).replace(
               /[.!?\s]+$/,
               '',
             );
-            return {
-              text: `${description}? Say yes to confirm.`,
-              action: { tool: tool.name, args: args.data, description, status: 'pending' },
-            };
+            proposals.push({ tool: tool.name, args: args.data, description });
+            continue;
           }
           const result = await runTool(tool, args.data, deps);
           const content = typeof result === 'string' ? result : JSON.stringify(result);
           messages.push({ role: 'tool', tool_name: tool.name, content: content.slice(0, 6000) });
+        }
+        if (proposals.length) {
+          const [first, ...also] = proposals;
+          // "Give Ana a chore: Wash the dishes, and set a reminder …" (lowercase after the first)
+          const description = proposals
+            .map((p, i) => (i ? p.description[0].toLowerCase() + p.description.slice(1) : p.description))
+            .join(', and ');
+          return {
+            text: `${description}? Say yes to confirm.`,
+            action: { ...first, description, status: 'pending', ...(also.length ? { also } : {}) },
+          };
         }
       }
       return { text: 'Sorry, that took too many steps. Try asking for one thing at a time.' };
