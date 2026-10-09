@@ -30,7 +30,9 @@ def send_command(speaker_id: int | None, confidence: float, text: str) -> dict:
     if config.MOCK:
         print(f'  (mock) POST /voice/command {body}')
         person = next((p for p in MOCK_PEOPLE if p['id'] == speaker_id), MOCK_PEOPLE[5])
-        return {'reply': 'mock reply', 'speaker': person, 'pending': False}
+        # Unknown voice -> guest line (a pregenerated clip), like the real hub's guest prompt
+        reply = "I don't recognize your voice, so I can't share family info." if speaker_id is None else 'mock reply'
+        return {'reply': reply, 'speaker': person, 'pending': False}
     r = requests.post(f'{config.HUB_URL}/voice/command', json=body, headers=_headers(), timeout=120)
     r.raise_for_status()
     return r.json()

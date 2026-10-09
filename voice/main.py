@@ -41,6 +41,8 @@ while True:
         else:
             uid, name, score = voiceid.identify(clip)
         print(f"[{name or 'guest'} {score:.2f}] {text}")
+        if uid is None:
+            print(f'  unknown voice (score {score:.2f} < {config.ID_THRESHOLD}) -> guest')
         state.last_speaker = name or 'guest'
 
         res = hub.send_command(uid, score, text)
