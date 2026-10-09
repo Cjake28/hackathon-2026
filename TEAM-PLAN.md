@@ -516,9 +516,18 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
    The briefing and the chore feedback are written fresh by the AI each time, so they can't be pre-recorded.
 2. **Then: help the team.** The demo can't run without alarms ringing (Hub), Ana's phone screen (UI) and the mic (Voice).
    Brain owns the hub laptop and runs the 2:30 merge.
-3. **Only if there's time at the end:** intercom ("tell everyone dinner's ready", #18), reward points for approved
-   chores (#15), "Welcome home Ana, you still have 2 chores" on arrival (#54), and prompt caching (fixed system
-   prompt, changing parts at the end; about 1 s faster per turn).
+3. **Now (decided): the three extras**, all in Brain files:
+   - **Intercom (#18):** "Tell everyone dinner's ready" / "Sabihin mo sa lahat…" → `announce` tool (confirm) →
+     `intercom` notice to every device + the hub says "Announcement from Mom: dinner's ready". New permission
+     `intercom.send` (parents and kids, not guests).
+   - **Reward points (#15):** every chore approved by the photo check = 10 points (counted from done chores, no new
+     table). The hub says "Great job, Ana! … That's 10 points, you have 30 now." Jarvis: "How many points do I have?"
+     (`my_points`). The briefing mentions points. For the UI: `GET /api/points` → `[{ userId, name, points, choresDone }]`
+     (leaderboard on the dashboard).
+   - **Welcome home + chores (#54):** arriving at Home → "Welcome home, Ana" (the clip) and then "You have 2 tasks
+     left: wash the dishes and finish math homework." In `welcomeHome()` (`api/src/location/welcome.ts`): the
+     location page uses it; Hub dev, call it from the device poll's arrival too (replaces your `speak("Welcome home…")`).
+   - Prompt caching (about 1 s per turn) stays for the very end, only if there's time.
 4. **Not doing:** a smaller model or a lower quantization. `qwen3.5:4b` is already Q4_K_M, fits 100% on the GPU and
    answers in 1–3 s; going smaller makes it dumber for a speed problem we no longer have.
 
