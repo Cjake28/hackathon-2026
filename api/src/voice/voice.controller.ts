@@ -32,6 +32,11 @@ const GUEST_EMAIL = 'guest@family.local'; // every unknown voice speaks as this 
 const YES = /^(yes|yeah|yep|yup|oo|opo|oho|sige|go|okay|ok|confirm|sure|do it|tama)\b/i;
 const NO = /^(no|nope|hindi|huwag|wag|cancel|stop|never mind|ayaw)\b/i;
 const CONFIRM_SECONDS = 60; // a proposed action waits this long for "yes"
+// A guest asking about the family always gets this exact sentence: never leaks anything, and matches the Voice dev's
+// pre-recorded clip (voice/clips/phrases.txt), so it plays instantly. General questions still go to the AI.
+const GUEST_REFUSAL = "I don't recognize your voice, so I can't share family info.";
+const FAMILY_TOPIC =
+  /\bhome\b|bahay|alarm|task|chore|grocer|calendar|schedule|budget|spend|money|family|pamilya|\bmom\b|\bdad\b|nanay|tatay|\bkids?\b|anak/i;
 const LOCALHOST = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
 const RECENT_MINUTES = 5; // earlier voice messages the AI sees, for follow-ups
 // "Good morning, Jarvis" always gives the briefing (#30): too important for the demo to leave to the model.
@@ -152,6 +157,7 @@ export class VoiceController {
   // pending action ("... Say yes to confirm."). Refusals (403/404/400 from a tool) are spoken, not thrown.
   private async think(user: AuthUser, conversationId: number, text: string): Promise<Answer> {
     const guest = user.role === 'guest';
+    if (guest && (FAMILY_TOPIC.test(text) || (await this.mentionsFamily(text)))) return { text: GUEST_REFUSAL };
     if (!guest && BRIEFING.test(text)) {
       return { text: spoken(await this.ai.text(await briefingFacts(this.prisma, user), BRIEFING_SYSTEM)) };
     }
@@ -224,7 +230,8 @@ export class VoiceController {
       return [
         "You are Jarvis, the voice assistant of a family's home hub. You don't recognize this speaker's voice, so they are a guest.",
         'Never share or change family information (people, alarms, tasks, schedules, who is home, shopping, money).',
-        "If they ask for it, say you don't recognize their voice so you can't help with that. You can answer general questions.",
+        "If they ask for it, say you don't recognize their voice so you can't help with that.",
+        'You can answer general questions: just answer them, without mentioning family information or their voice.',
         style,
         time,
       ].join('\n');
@@ -247,6 +254,14 @@ export class VoiceController {
     ]
       .filter(Boolean)
       .join('\n');
+  }
+
+  private async mentionsFamily(text: string) {
+    const family = await this.prisma.user.findMany({ where: { role: { name: { in: ['parent', 'child'] } } } });
+    // Speech-to-text spellings too: "Anna" → Ana (doubled letters squashed on both sides). "been" isn't Ben.
+    const squash = (s: string) => s.toLowerCase().replace(/(.)\1+/g, '$1');
+    const words = text.toLowerCase().split(/[^\p{L}]+/u).filter((w) => w && w !== 'been');
+    return family.some((u) => words.some((w) => squash(w) === squash(u.name)));
   }
 
   private sorry(user: AuthUser, error: unknown) {

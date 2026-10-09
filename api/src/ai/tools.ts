@@ -327,14 +327,28 @@ export async function checkTool(t: AnyTool, args: unknown, deps: Deps) {
 
 // ---- helpers for the family tools ----
 
-// findPerson(), but also finds "Ana" in "my daughter Ana" or "Ana's" (small models add words).
+// What people (and speech-to-text) call the parents.
+const NICKNAMES: Record<string, string[]> = {
+  mom: ['mom', 'mommy', 'mum', 'mama', 'ma', 'nanay', 'inay', 'mother'],
+  dad: ['dad', 'daddy', 'papa', 'pa', 'tatay', 'itay', 'father'],
+};
+// "Anna" → "ana", "Benn" → "ben": speech-to-text doubles letters in names.
+const squash = (s: string) => s.toLowerCase().replace(/(.)\1+/g, '$1');
+
+// findPerson(), plus what small models and speech-to-text write instead of the exact name:
+// "my daughter Ana", "Ana's", "mama" → Mom, "papa" → Dad, "Anna" → Ana. Only a single clear match counts.
 async function person(prisma: PrismaService, name: string | undefined, me: AuthUser) {
   if (!name || /^(i|my|mine|me|myself|ako|akin)$/i.test(name.trim())) return findPerson(prisma, undefined, me);
   try {
     return await findPerson(prisma, name, me);
   } catch (error) {
     const users = await prisma.user.findMany({ where: { role: { name: { not: 'guest' } } } });
-    const found = users.find((u) => new RegExp(`\\b${u.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(name));
+    const words = name.toLowerCase().replace(/'s\b/g, '').split(/[^\p{L}]+/u).filter(Boolean);
+    const only = (matches: typeof users) => (matches.length === 1 ? matches[0] : undefined);
+    const found =
+      only(users.filter((u) => words.includes(u.name.toLowerCase()))) ??
+      only(users.filter((u) => words.some((w) => NICKNAMES[u.name.toLowerCase()]?.includes(w)))) ??
+      only(users.filter((u) => words.some((w) => w.length >= 3 && squash(w) === squash(u.name))));
     if (found) return found;
     throw error;
   }

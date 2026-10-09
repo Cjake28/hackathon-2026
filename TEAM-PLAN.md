@@ -497,6 +497,23 @@ As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" 
    nicknames (mama/mommy/nanay → Mom, papa/daddy/tatay → Dad), possessives ("Ana's"), and doubled letters ("Anna" →
    Ana, "Benn" → Ben). Also: fixed guest reply text and "Welcome home, Ana" without "!", so they match the Voice dev's
    pre-recorded clips (instant voice). Proof: the 10× demo test again, plus the misspelled names.
+   **Done:** 110/110 (8 demo lines + "Anna" lines, 10× each). Guest "who's home?" now 14 ms with the fixed sentence.
+
+   **For the Voice dev's `voice/clips/phrases.txt`** (pre-recorded = instant). Exact hub text in the demo; matching ignores
+   upper/lower case, so it must be the same words and punctuation:
+   ```
+   I don't recognize your voice, so I can't share family info.
+   Set an alarm "Wake up" for Ana in 4 minutes? Say yes to confirm.
+   Done! Set an alarm "Wake up" for Ana in 4 minutes.
+   Sorry Ana. Mom set that alarm, so only a parent can remove it.
+   Give Ana a chore: Wash the dishes? Say yes to confirm.
+   Done! Give Ana a chore: Wash the dishes.
+   Ana, Mom gave you a chore: Wash the dishes
+   Okay, cancelled.
+   Ana, Wake up!
+   Welcome home, Ana
+   ```
+   The briefing and the chore feedback are written fresh by the AI each time, so they can't be pre-recorded.
 2. **Then: help the team.** The demo can't run without alarms ringing (Hub), Ana's phone screen (UI) and the mic (Voice).
    Brain owns the hub laptop and runs the 2:30 merge.
 3. **Only if there's time at the end:** intercom ("tell everyone dinner's ready", #18), reward points for approved

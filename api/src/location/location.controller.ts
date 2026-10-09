@@ -45,7 +45,7 @@ export class LocationController {
         for (const p of parents) {
           if (p.id !== user.id) await notify(this.prisma, p.id, here ? 'presence:arrived' : 'presence:left', text, { userId: user.id, placeId: here?.id ?? left?.id });
         }
-        if (here) speak(/^home$/i.test(here.name) ? `Welcome home, ${user.name}!` : text);
+        if (here) speak(/^home$/i.test(here.name) ? `Welcome home, ${user.name}` : text); // same text as Hub + the voice clip
       }
     }
     return { place: here?.name ?? null };
