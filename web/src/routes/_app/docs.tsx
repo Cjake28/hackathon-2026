@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { Trash2, Upload } from 'lucide-react';
+import { AiStatus } from '@/components/AiStatus';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,7 +26,10 @@ function DocsPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold">Docs</h1>
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold">Docs</h1>
+        <AiStatus />
+      </div>
       <AskPanel />
       <DocumentsPanel canManage={can('docs.manage')} />
     </div>

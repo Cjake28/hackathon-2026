@@ -37,20 +37,8 @@ function useSignIn<T>(path: string) {
 }
 
 export const useLogin = () => useSignIn<{ email: string; password: string }>('/auth/login');
-export const useVerifyEmail = () => useSignIn<{ email: string; code: string }>('/auth/verify-email');
-export const useGoogleSignIn = () => useSignIn<{ credential: string }>('/auth/google');
-
-// Sign-up step 1: emails a 6-digit code. Step 2 is useVerifyEmail.
 export const useRegister = () =>
-  useMutation({
-    mutationFn: (data: { name: string; email: string; password: string }) =>
-      api.post<{ email: string }>('/auth/register', data),
-  });
-
-export const useResendCode = () =>
-  useMutation({
-    mutationFn: (email: string) => api.post<{ email: string }>('/auth/resend-code', { email }),
-  });
+  useSignIn<{ name: string; email: string; password: string }>('/auth/register');
 
 export const useLogout = () => {
   const qc = useQueryClient();

@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { Link, Navigate, createFileRoute, useNavigate } from '@tanstack/react-router';
+import { Link, Navigate, createFileRoute } from '@tanstack/react-router';
 import { AuthCard } from '@/components/AuthCard';
-import { GoogleButton } from '@/components/GoogleButton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,7 +11,6 @@ export const Route = createFileRoute('/register')({ component: RegisterPage });
 function RegisterPage() {
   const { data: user } = useMe();
   const register = useRegister();
-  const navigate = useNavigate();
   const [form, setForm] = useState({ name: '', email: '', password: '' });
 
   if (user) return <Navigate to="/" />;
@@ -20,7 +18,6 @@ function RegisterPage() {
   return (
     <AuthCard
       title="Create an account"
-      description="We'll email you a 6-digit code to verify it."
       footer={
         <>
           Already have an account?
@@ -30,14 +27,11 @@ function RegisterPage() {
         </>
       }
     >
-      <GoogleButton />
       <form
         className="space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
-          register.mutate(form, {
-            onSuccess: ({ email }) => navigate({ to: '/verify', search: { email } }),
-          });
+          register.mutate(form); // logs in right away; the page then redirects home
         }}
       >
         <div className="space-y-2">

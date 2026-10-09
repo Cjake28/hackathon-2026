@@ -12,13 +12,5 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
-  # Catches every email the API sends. Inbox: http://localhost:4104
-  mail:
-    image: axllent/mailpit
-    restart: unless-stopped
-    ports:
-      - "4103:1025"
-      - "4104:8025"
-
 volumes:
   pgdata:

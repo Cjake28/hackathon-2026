@@ -7,7 +7,6 @@ import { AiService } from './ai/ai.service';
 import { AuthController } from './auth/auth.controller';
 import { AuthGuard } from './auth/auth.guard';
 import { ItemsController } from './items/items.controller';
-import { MailService } from './mail.service';
 import { PrismaService } from './prisma.service';
 import { RagController } from './rag/rag.controller';
 import { RagService } from './rag/rag.service';
@@ -35,7 +34,6 @@ import { UsersController } from './users/users.controller';
   // and every new service here
   providers: [
     PrismaService,
-    MailService,
     AiService,
     RagService,
     { provide: APP_GUARD, useClass: AuthGuard },

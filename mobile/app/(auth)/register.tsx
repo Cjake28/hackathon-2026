@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { Link, router } from 'expo-router';
+import { Link } from 'expo-router';
 import { AuthScreen, Field } from '@/components/AuthScreen';
-import { GoogleButton } from '@/components/GoogleButton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,15 +11,11 @@ export default function RegisterScreen() {
   const register = useRegister();
   const [form, setForm] = useState({ name: '', email: '', password: '' });
 
-  const submit = () =>
-    register.mutate(form, {
-      onSuccess: ({ email }) => router.push({ pathname: '/verify', params: { email } }),
-    });
+  const submit = () => register.mutate(form); // logs in right away; the auth layout then redirects home
 
   return (
     <AuthScreen
       title="Create an account"
-      description="We'll email you a 6-digit code to verify it."
       footer={
         <>
           <Text className="text-sm text-muted-foreground">Already have an account?</Text>
@@ -30,7 +25,6 @@ export default function RegisterScreen() {
         </>
       }
     >
-      <GoogleButton />
       <Field>
         <Label>Name</Label>
         <Input value={form.name} onChangeText={(name) => setForm({ ...form, name })} />

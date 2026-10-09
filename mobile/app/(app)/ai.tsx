@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { AiStatus } from '@/components/AiStatus';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
@@ -31,11 +32,14 @@ export default function AiChatScreen() {
         contentContainerClassName="gap-2 p-4"
         onContentSizeChange={() => list.current?.scrollToEnd({ animated: true })}
         ListHeaderComponent={
-          messages.length ? (
-            <Button variant="ghost" size="sm" className="self-end" onPress={reset} disabled={pending}>
-              <Text>New chat</Text>
-            </Button>
-          ) : null
+          <View className="flex-row items-center justify-between">
+            <AiStatus />
+            {messages.length ? (
+              <Button variant="ghost" size="sm" onPress={reset} disabled={pending}>
+                <Text>New chat</Text>
+              </Button>
+            ) : null}
+          </View>
         }
         ListEmptyComponent={<Text className="text-center text-muted-foreground">Ask anything to start.</Text>}
         renderItem={({ item }) => (

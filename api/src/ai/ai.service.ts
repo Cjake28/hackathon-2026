@@ -4,235 +4,145 @@ import {
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { GoogleGenAI } from '@google/genai';
-import OpenAI from 'openai';
+import { Ollama, type Message } from 'ollama';
 import { z } from 'zod';
 
 export type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
-// Models are set in api/.env (AI_MODEL, AI_EMBEDDING_MODEL).
-const MODEL = process.env.AI_MODEL || 'gemini-3.8-flash';
-const EMBEDDING_MODEL = process.env.AI_EMBEDDING_MODEL || 'gemini-embedding-001';
+// Local AI (Ollama on the hub). Settings in api/.env.
+const HOST = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
+const MODEL = process.env.AI_MODEL || 'qwen3.5:2b';
+const EMBEDDING_MODEL = process.env.AI_EMBEDDING_MODEL || 'embeddinggemma';
+const THINK = process.env.AI_THINK === 'true'; // step-by-step reasoning: smarter, but much slower on small machines
+const CONTEXT = Number(process.env.AI_CONTEXT || 8192); // tokens the model can see at once (more = more memory)
+const KEEP_ALIVE = process.env.AI_KEEP_ALIVE || '30m'; // keep the model loaded so answers start fast
+const FACTUAL = { temperature: 0.2 }; // text() and json(): stick to the facts (RAG, extraction). chat() keeps the model's default.
 export const EMBEDDING_DIMENSIONS = 768; // keep in sync with vector(768) in schema.prisma
-const COOLDOWN_MS = 60_000; // a provider that hit its rate limit is tried last for this long
 
-type JsonSchema = Record<string, unknown>;
-
-// One AI backend. Every provider can chat; only Gemini can embed (RAG vectors must all come from one model).
-type Provider = {
-  name: string;
-  text(prompt: string, system?: string): Promise<string>;
-  json(prompt: string, schema: JsonSchema, system?: string): Promise<string>;
-  chat(messages: ChatMessage[], system?: string): AsyncGenerator<string>;
-  embed?(texts: string[], kind: 'document' | 'query'): Promise<number[][]>;
-};
-
-// Every AI call goes through here. Providers are tried in order; when one fails (rate limit, error, outage)
-// the next one answers. Configure them in api/.env:
-//   1. Gemini: GEMINI_API_KEY (or Vertex AI with GOOGLE_GENAI_USE_VERTEXAI=true)
-//   2. Gemini backup: GEMINI_API_KEY_BACKUP and/or AI_MODEL_BACKUP
-//   3. Any OpenAI-compatible API (OpenAI, Groq, OpenRouter, ...): BACKUP_AI_API_KEY + BACKUP_AI_MODEL (+ BACKUP_AI_BASE_URL)
-// Never call the AI from web/mobile (the keys would leak).
+// Every AI call goes through here. Only the API talks to Ollama; web/mobile call the API.
 @Injectable()
 export class AiService {
-  private providers = buildProviders();
-  private cooldownUntil = new Map<string, number>();
+  private ollama = new Ollama({ host: HOST });
+  private thinkSupported = true; // turned off if the model rejects the `think` option
 
   // Plain text answer.
-  text(prompt: string, system?: string) {
-    return this.withFallback('text', (p) => p.text(prompt, system));
+  async text(prompt: string, system?: string) {
+    const res = await this.chatOnce(withSystem([{ role: 'user', content: prompt }], system));
+    return res.message.content;
   }
 
   // JSON that matches a zod schema: `await ai.json(prompt, z.object({ ... }))` returns typed data.
-  json<T extends z.ZodType>(prompt: string, schema: T, system?: string): Promise<z.infer<T>> {
-    const { $schema, ...jsonSchema } = z.toJSONSchema(schema) as JsonSchema;
-    return this.withFallback('json', async (p) => {
-      const parsed = schema.safeParse(parseJson(await p.json(prompt, jsonSchema, system)));
-      if (!parsed.success) throw new BadGatewayException('The AI returned an unexpected answer. Try again.');
-      return parsed.data;
-    });
+  async json<T extends z.ZodType>(prompt: string, schema: T, system?: string): Promise<z.infer<T>> {
+    const { $schema, ...format } = z.toJSONSchema(schema) as Record<string, unknown>;
+    const res = await this.chatOnce(withSystem([{ role: 'user', content: prompt }], system), format);
+    const parsed = schema.safeParse(parseJson(res.message.content));
+    if (!parsed.success) throw new BadGatewayException('The AI returned an unexpected answer. Try again.');
+    return parsed.data;
   }
 
-  // Streams a chat reply piece by piece. Falls back only before the first piece arrives.
+  // Streams a chat reply piece by piece.
   async *chat(messages: ChatMessage[], system?: string): AsyncGenerator<string> {
-    const { first, rest } = await this.withFallback('chat', async (p) => {
-      const stream = p.chat(messages, system);
-      return { first: await stream.next(), rest: stream };
-    });
-    if (first.done) return;
-    yield first.value;
+    const stream = await this.call(() =>
+      this.ollama.chat({ ...this.base(), messages: withSystem(messages, system), stream: true }),
+    );
     try {
-      yield* rest;
+      for await (const part of stream) if (part.message.content) yield part.message.content;
     } catch (error) {
       throw toHttpError(error);
     }
   }
 
   // Embeddings for RAG: 'document' for stored chunks, 'query' for questions.
-  embed(texts: string[], kind: 'document' | 'query') {
-    if (this.providers.length && !this.providers.some((p) => p.embed)) {
-      throw new ServiceUnavailableException('RAG needs a Gemini key (GEMINI_API_KEY or GEMINI_API_KEY_BACKUP) for embeddings.');
-    }
-    return this.withFallback('embed', (p) => p.embed!(texts, kind), (p) => !!p.embed);
-  }
-
-  private async withFallback<T>(
-    task: string,
-    call: (provider: Provider) => Promise<T>,
-    canDo: (provider: Provider) => boolean = () => true,
-  ): Promise<T> {
-    const now = Date.now();
-    const cooling = (p: Provider) => (this.cooldownUntil.get(p.name) ?? 0) > now;
-    // Providers on cooldown go last (still tried, in case everything else is down).
-    const candidates = this.providers.filter(canDo).sort((a, b) => Number(cooling(a)) - Number(cooling(b)));
-    if (!candidates.length) {
-      throw new ServiceUnavailableException('AI is not configured. Set GEMINI_API_KEY in api/.env.');
-    }
-
-    let lastError: unknown;
-    for (const [i, provider] of candidates.entries()) {
-      try {
-        const result = await call(provider);
-        if (i > 0) console.warn(`[ai] ${task}: answered by backup "${provider.name}"`);
-        return result;
-      } catch (error: any) {
-        lastError = error;
-        if (error?.status === 429) this.cooldownUntil.set(provider.name, Date.now() + COOLDOWN_MS);
-        console.warn(`[ai] ${task}: "${provider.name}" failed (${error?.status ?? 'error'}): ${errorMessage(error)}`);
-      }
-    }
-    throw toHttpError(lastError);
-  }
-}
-
-function buildProviders(): Provider[] {
-  const env = process.env;
-  const providers: Provider[] = [];
-
-  const vertex = env.GOOGLE_GENAI_USE_VERTEXAI === 'true';
-  const primaryConfigured = vertex ? !!env.GOOGLE_CLOUD_PROJECT : !!(env.GEMINI_API_KEY || env.GOOGLE_API_KEY);
-  // The SDK reads the key / Vertex settings from the environment.
-  const primary = primaryConfigured ? new GoogleGenAI({}) : null;
-  if (primary) providers.push(gemini('gemini', primary, MODEL, vertex));
-
-  if (env.GEMINI_API_KEY_BACKUP) {
-    const backup = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY_BACKUP, vertexai: false });
-    providers.push(gemini('gemini-backup', backup, env.AI_MODEL_BACKUP || MODEL, false));
-  } else if (primary && env.AI_MODEL_BACKUP) {
-    // Same key, another model: Gemini rate limits are per model.
-    providers.push(gemini('gemini-backup-model', primary, env.AI_MODEL_BACKUP, vertex));
-  }
-
-  if (env.BACKUP_AI_API_KEY && env.BACKUP_AI_MODEL) {
-    const client = new OpenAI({
-      apiKey: env.BACKUP_AI_API_KEY,
-      baseURL: env.BACKUP_AI_BASE_URL || undefined,
-      maxRetries: 1,
-    });
-    providers.push(openAiCompatible('backup-ai', client, env.BACKUP_AI_MODEL));
-  }
-  return providers;
-}
-
-function gemini(name: string, client: GoogleGenAI, model: string, vertex: boolean): Provider {
-  return {
-    name,
-    async text(prompt, system) {
-      const res = await client.models.generateContent({ model, contents: prompt, config: { systemInstruction: system } });
-      return res.text ?? '';
-    },
-    async json(prompt, schema, system) {
-      const res = await client.models.generateContent({
-        model,
-        contents: prompt,
-        config: { systemInstruction: system, responseMimeType: 'application/json', responseJsonSchema: schema },
-      });
-      return res.text ?? '';
-    },
-    async *chat(messages, system) {
-      const stream = await client.models.generateContentStream({
-        model,
-        contents: messages.map((m) => ({
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }],
-        })),
-        config: { systemInstruction: system },
-      });
-      for await (const chunk of stream) if (chunk.text) yield chunk.text;
-    },
-    async embed(texts, kind) {
-      // Vertex takes one text per embedding request for this model; the Gemini API takes up to 100.
-      const batch = vertex ? 1 : 100;
-      const vectors: number[][] = [];
-      for (let i = 0; i < texts.length; i += batch) {
-        const res = await client.models.embedContent({
+  async embed(texts: string[], kind: 'document' | 'query'): Promise<number[][]> {
+    const prefix = embeddingPrefix(kind);
+    const vectors: number[][] = [];
+    for (let i = 0; i < texts.length; i += 32) {
+      const res = await this.call(() =>
+        this.ollama.embed({
           model: EMBEDDING_MODEL,
-          contents: texts.slice(i, i + batch),
-          config: {
-            taskType: kind === 'document' ? 'RETRIEVAL_DOCUMENT' : 'RETRIEVAL_QUERY',
-            outputDimensionality: EMBEDDING_DIMENSIONS,
-          },
-        });
-        vectors.push(...(res.embeddings ?? []).map((e) => normalize(e.values ?? [])));
-      }
-      return vectors;
-    },
-  };
-}
+          input: texts.slice(i, i + 32).map((t) => prefix + t),
+          keep_alive: KEEP_ALIVE,
+        }),
+      );
+      vectors.push(...res.embeddings);
+    }
+    if (vectors.length && vectors[0].length !== EMBEDDING_DIMENSIONS) {
+      throw new BadGatewayException(
+        `${EMBEDDING_MODEL} returns ${vectors[0].length} numbers per text; the database expects ${EMBEDDING_DIMENSIONS}. Use a 768-dimension embedding model.`,
+      );
+    }
+    return vectors;
+  }
 
-function openAiCompatible(name: string, client: OpenAI, model: string): Provider {
-  const withSystem = (messages: ChatMessage[], system?: string): OpenAI.Chat.ChatCompletionMessageParam[] => [
-    ...(system ? [{ role: 'system' as const, content: system }] : []),
-    ...messages,
-  ];
-  return {
-    name,
-    async text(prompt, system) {
-      const res = await client.chat.completions.create({
-        model,
-        messages: withSystem([{ role: 'user', content: prompt }], system),
-      });
-      return res.choices[0]?.message?.content ?? '';
-    },
-    async json(prompt, schema, system) {
-      const instructions = `${system ?? ''}\nReply with JSON only, matching this JSON schema: ${JSON.stringify(schema)}`;
-      const res = await client.chat.completions.create({
-        model,
-        messages: withSystem([{ role: 'user', content: prompt }], instructions.trim()),
-        response_format: { type: 'json_object' },
-      });
-      return res.choices[0]?.message?.content ?? '';
-    },
-    async *chat(messages, system) {
-      const stream = await client.chat.completions.create({ model, messages: withSystem(messages, system), stream: true });
-      for await (const chunk of stream) {
-        const text = chunk.choices[0]?.delta?.content;
-        if (text) yield text;
-      }
-    },
-  };
-}
-
-// Readable message from Gemini/OpenAI errors (Gemini's can be JSON inside JSON).
-function errorMessage(error: any) {
-  let message = String(error?.message ?? error);
-  for (let i = 0; i < 3; i++) {
+  // For the UI: is Ollama running, and are both models downloaded?
+  async status() {
+    const base = { model: MODEL, embeddingModel: EMBEDDING_MODEL };
     try {
-      const inner = JSON.parse(message).error?.message;
-      if (typeof inner !== 'string') break;
-      message = inner;
+      const { models } = await this.ollama.list();
+      const names = models.map((m) => m.name);
+      const has = (model: string) => names.includes(model) || names.includes(`${model}:latest`);
+      return { ...base, online: true, missing: [MODEL, EMBEDDING_MODEL].filter((m) => !has(m)) };
     } catch {
-      break;
+      return { ...base, online: false, missing: [] as string[] };
     }
   }
-  return message.replace(/\s+/g, ' ').trim();
+
+  private base(options: Record<string, number> = {}) {
+    return {
+      model: MODEL,
+      keep_alive: KEEP_ALIVE,
+      options: { num_ctx: CONTEXT, ...options },
+      ...(this.thinkSupported ? { think: THINK } : {}),
+    };
+  }
+
+  private async chatOnce(messages: Message[], format?: Record<string, unknown>) {
+    return this.call(() => this.ollama.chat({ ...this.base(FACTUAL), messages, format, stream: false }));
+  }
+
+  private async call<T>(request: () => Promise<T>): Promise<T> {
+    try {
+      return await request();
+    } catch (error: any) {
+      // Models without a thinking mode reject the `think` option: drop it and retry once.
+      if (this.thinkSupported && /does not support thinking/i.test(String(error?.message))) {
+        this.thinkSupported = false;
+        return this.call(request);
+      }
+      throw toHttpError(error);
+    }
+  }
 }
 
-// AI errors become 429 (rate limit) or 502 with the provider's message. Never 401: that would log the user out.
+const withSystem = (messages: ChatMessage[], system?: string): Message[] => [
+  ...(system ? [{ role: 'system', content: system }] : []),
+  ...messages,
+];
+
+// Embedding models give better search results with their own prefixes. Add yours if you switch models.
+function embeddingPrefix(kind: 'document' | 'query') {
+  if (EMBEDDING_MODEL.startsWith('embeddinggemma')) {
+    return kind === 'document' ? 'title: none | text: ' : 'task: search result | query: ';
+  }
+  if (EMBEDDING_MODEL.startsWith('nomic-embed-text')) {
+    return kind === 'document' ? 'search_document: ' : 'search_query: ';
+  }
+  return '';
+}
+
+// Ollama down → 503 with what to do; missing model → 503 with the pull command; anything else → 502.
 function toHttpError(error: any) {
   if (error instanceof HttpException) return error;
-  if (error?.status === 429) return new HttpException('The AI is busy (rate limit). Try again in a minute.', 429);
-  return new BadGatewayException(`AI request failed: ${errorMessage(error)}`);
+  const message = String(error?.message ?? error);
+  if (/fetch failed|ECONNREFUSED/i.test(message) || error?.cause?.code === 'ECONNREFUSED') {
+    return new ServiceUnavailableException(
+      'The local AI is offline. On the hub, open the Ollama app (or run `ollama serve`).',
+    );
+  }
+  if (error?.status_code === 404 && /model/i.test(message)) {
+    return new ServiceUnavailableException(`${message}. On the hub, run: ollama pull <model name>`);
+  }
+  return new BadGatewayException(`AI request failed: ${message}`);
 }
 
 function parseJson(text?: string) {
@@ -241,10 +151,4 @@ function parseJson(text?: string) {
   } catch {
     return undefined;
   }
-}
-
-// Shortened Gemini embeddings must be normalized before comparing them.
-function normalize(values: number[]) {
-  const length = Math.hypot(...values) || 1;
-  return values.map((v) => v / length);
 }

@@ -1,7 +1,15 @@
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { streamText } from '@/lib/api';
-import type { ChatMessage } from '@/types';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { api, streamText } from '@/lib/api';
+import type { AiStatus, ChatMessage } from '@/types';
+
+// Is the hub's local AI running, and are its models downloaded? Rechecked every 15 seconds.
+export const useAiStatus = () =>
+  useQuery({
+    queryKey: ['ai-status'],
+    queryFn: () => api.get<AiStatus>('/ai/status'),
+    refetchInterval: 15_000,
+  });
 
 // AI chat with a streamed reply. The conversation lives in component state (not saved).
 export function useChat() {

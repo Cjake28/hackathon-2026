@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { RotateCcw, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { AiStatus } from '@/components/AiStatus';
 import { useChat } from '@/hooks/useAi';
 import { cn } from '@/lib/utils';
 
@@ -24,7 +25,10 @@ function AiChatPage() {
   return (
     <div className="flex h-[calc(100vh-10rem)] flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">AI Chat</h1>
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold">AI Chat</h1>
+          <AiStatus />
+        </div>
         <Button variant="ghost" size="sm" onClick={reset} disabled={pending || !messages.length}>
           <RotateCcw /> New chat
         </Button>

@@ -8,6 +8,7 @@ export default defineConfig({
   plugins: [tanstackRouter({ target: 'react' }), react(), tailwindcss()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   // Fixed ports for this project only. strictPort: Google sign-in only works on the exact origin http://localhost:4100.
-  server: { port: 4100, strictPort: true, proxy: { '/api': 'http://localhost:4101' } },
+  // host: true = reachable from other devices on the local network (http://<this-ip>:4100).
+  server: { host: true, port: 4100, strictPort: true, proxy: { '/api': 'http://localhost:4101' } },
   preview: { port: 4100, strictPort: true },
 });

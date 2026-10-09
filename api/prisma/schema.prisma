@@ -10,8 +10,7 @@ model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
   name      String
-  password  String? // null for Google-only accounts
-  googleId  String?  @unique
+  password  String
   avatarUrl String?
   roleId    Int
   role      Role     @relation(fields: [roleId], references: [id])
@@ -24,17 +23,6 @@ model Role {
   name        String   @unique
   permissions String[]
   users       User[]
-}
-
-// Email sign-ups wait here until their OTP is verified, then become a User.
-model PendingSignup {
-  email     String   @id
-  name      String
-  password  String
-  codeHash  String
-  attempts  Int      @default(0)
-  sentAt    DateTime
-  expiresAt DateTime
 }
 
 // RAG: an uploaded file, split into chunks that each carry an embedding (pgvector).

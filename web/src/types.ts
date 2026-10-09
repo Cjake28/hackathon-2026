@@ -40,6 +40,9 @@ export type Item = {
 
 export type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
+// Local AI (Ollama on the hub). `missing` lists models that still need `ollama pull`.
+export type AiStatus = { online: boolean; model: string; embeddingModel: string; missing: string[] };
+
 // RAG
 export type RagDocument = {
   id: number;

@@ -2,7 +2,9 @@
   "name": "hackathon-boilerplate",
   "private": true,
   "scripts": {
-    "setup": "node -e \"const f=require('fs');for(const d of ['api','web','mobile'])f.existsSync(d+'/.env')||!f.existsSync(d)||f.copyFileSync(d+'/.env.example',d+'/.env')\" && npm install && npm install --prefix api && npm install --prefix web && npm install --prefix mobile",
+    "setup": "node scripts/setup-env.mjs && npm install && npm install --prefix api && npm install --prefix web && npm install --prefix mobile",
+    "hub": "node scripts/hub.mjs",
+    "ai": "ollama serve",
     "dev": "concurrently -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
     "dev:api": "npm run dev --prefix api",
     "dev:web": "npm run dev --prefix web",

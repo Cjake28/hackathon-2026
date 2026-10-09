@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
+import { AiStatus } from '@/components/AiStatus';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,7 @@ export default function DocsScreen() {
       contentContainerClassName="gap-4 p-4"
       keyboardShouldPersistTaps="handled"
     >
+      <AiStatus />
       <Text className="text-sm text-muted-foreground">
         Answers come only from the {docs?.length ?? 0} uploaded document(s), with sources.
       </Text>

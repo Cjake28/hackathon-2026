@@ -8,6 +8,8 @@ export const RAG = {
   fileTypes: /\.(pdf|txt|md|markdown)$/i,
   system: [
     'Answer the question using only the numbered sources.',
+    'Copy numbers, names, dates and amounts exactly as they appear in the sources; never calculate or guess them.',
+    'Keep the answer short.',
     'Cite the sources you used like [1] or [2][3] right after the sentence they support.',
     "If the sources don't contain the answer, say you couldn't find it in the documents.",
     'Reply in the language of the question.',

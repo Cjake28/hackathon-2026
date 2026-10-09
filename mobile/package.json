@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@react-native-google-signin/google-signin": "^16.1.5",
     "@rn-primitives/checkbox": "^1.5.2",
     "@rn-primitives/label": "^1.5.2",
     "@rn-primitives/portal": "~1.4.0",
