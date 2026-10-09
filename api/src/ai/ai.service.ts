@@ -2,6 +2,7 @@ import {
   BadGatewayException,
   HttpException,
   Injectable,
+  OnApplicationBootstrap,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Ollama, type Message } from 'ollama';
@@ -21,9 +22,18 @@ export const EMBEDDING_DIMENSIONS = 768; // keep in sync with vector(768) in sch
 
 // Every AI call goes through here. Only the API talks to Ollama; web/mobile call the API.
 @Injectable()
-export class AiService {
+export class AiService implements OnApplicationBootstrap {
   private ollama = new Ollama({ host: HOST });
   private thinkSupported = true; // turned off if the model rejects the `think` option
+
+  // Load both models in the background at startup, so the first question doesn't wait for it.
+  onApplicationBootstrap() {
+    void this.ollama
+      .generate({ model: MODEL, prompt: '', keep_alive: KEEP_ALIVE })
+      .then(() => this.ollama.embed({ model: EMBEDDING_MODEL, input: 'warm up', keep_alive: KEEP_ALIVE }))
+      .then(() => console.log(`[ai] ${MODEL} and ${EMBEDDING_MODEL} are loaded`))
+      .catch(() => {}); // Ollama offline or a model missing: the AI status badge explains it
+  }
 
   // Plain text answer.
   async text(prompt: string, system?: string) {
@@ -41,9 +51,18 @@ export class AiService {
   }
 
   // Streams a chat reply piece by piece.
-  async *chat(messages: ChatMessage[], system?: string): AsyncGenerator<string> {
+  chat(messages: ChatMessage[], system?: string) {
+    return this.stream(withSystem(messages, system));
+  }
+
+  // Like text(), but streamed piece by piece (e.g. RAG answers).
+  textStream(prompt: string, system?: string) {
+    return this.stream(withSystem([{ role: 'user', content: prompt }], system), FACTUAL);
+  }
+
+  private async *stream(messages: Message[], options: Record<string, number> = {}): AsyncGenerator<string> {
     const stream = await this.call(() =>
-      this.ollama.chat({ ...this.base(), messages: withSystem(messages, system), stream: true }),
+      this.ollama.chat({ ...this.base(options), messages, stream: true }),
     );
     try {
       for await (const part of stream) if (part.message.content) yield part.message.content;

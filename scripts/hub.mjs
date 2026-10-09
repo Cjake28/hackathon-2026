@@ -1,37 +1,26 @@
 // `npm run hub`: run the whole app from this computer for every device on the same Wi-Fi / LAN.
 // Starts Ollama if needed, builds the web app, then the API serves it: other devices open http://<this-ip>:4101.
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-
-if (existsSync('api/.env')) process.loadEnvFile('api/.env');
-const ollama = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
-const models = [process.env.AI_MODEL || 'qwen3.5:2b', process.env.AI_EMBEDDING_MODEL || 'embeddinggemma'];
-
-const tags = () =>
-  fetch(`${ollama}/api/tags`, { signal: AbortSignal.timeout(3000) })
-    .then((res) => res.json())
-    .catch(() => null);
+import { EMBEDDING_MODEL, MODEL, OLLAMA, installedModels, isInstalled, ollamaEnv, ollamaExe } from './ollama.mjs';
 
 // 1. Local AI: start `ollama serve` if it isn't running, then check the models.
-let list = await tags();
-if (!list) {
-  const windowsExe = join(process.env.LOCALAPPDATA ?? '', 'Programs', 'Ollama', 'ollama.exe');
-  const exe = process.platform === 'win32' && existsSync(windowsExe) ? windowsExe : 'ollama';
-  console.log('Starting Ollama…');
-  spawn(exe, ['serve'], { detached: true, stdio: 'ignore', windowsHide: true }).on('error', () => {}).unref();
-  for (let i = 0; i < 15 && !list; i++) {
+let names = await installedModels();
+if (!names) {
+  console.log(`Starting Ollama (answers at the same time: ${ollamaEnv.OLLAMA_NUM_PARALLEL})…`);
+  spawn(ollamaExe, ['serve'], { detached: true, stdio: 'ignore', windowsHide: true, env: ollamaEnv })
+    .on('error', () => {})
+    .unref();
+  for (let i = 0; i < 15 && !names; i++) {
     await new Promise((r) => setTimeout(r, 1000));
-    list = await tags();
+    names = await installedModels();
   }
 }
-if (!list) {
-  console.warn(`⚠ Ollama isn't running at ${ollama}. Install it from https://ollama.com and run "ollama serve".`);
+if (!names) {
+  console.warn(`⚠ Ollama isn't running at ${OLLAMA}. Install it from https://ollama.com and run "npm run ai".`);
 } else {
-  const names = list.models.map((m) => m.name);
-  const missing = models.filter((m) => !names.includes(m) && !names.includes(`${m}:latest`));
+  const missing = [MODEL, EMBEDDING_MODEL].filter((m) => !isInstalled(names, m));
   if (missing.length) console.warn(`⚠ Download these models first: ${missing.map((m) => `ollama pull ${m}`).join(' && ')}`);
-  else console.log(`✔ Local AI ready (${models.join(', ')})`);
+  else console.log(`✔ Local AI ready (${MODEL}, ${EMBEDDING_MODEL}). The API loads them at startup.`);
 }
 
 // 2. Build the web app and the API.

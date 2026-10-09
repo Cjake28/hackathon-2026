@@ -1,4 +1,5 @@
 import { Link, createFileRoute } from '@tanstack/react-router';
+import { JoinQr } from '@/components/JoinQr';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useMe } from '@/hooks/useAuth';
@@ -24,6 +25,7 @@ function HomePage() {
       <Button asChild>
         <Link to="/items">Open the example</Link>
       </Button>
+      <JoinQr />
     </div>
   );
 }

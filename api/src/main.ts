@@ -1,11 +1,12 @@
 import './env';
-import { networkInterfaces } from 'node:os';
 import fastifyCookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import QRCode from 'qrcode';
 import { AppModule } from './app.module';
 import { ErrorFilter } from './error.filter';
+import { lanAddresses } from './network';
 import { WEB_DIST, webIndex } from './web';
 
 async function bootstrap() {
@@ -29,22 +30,18 @@ async function bootstrap() {
   app.useGlobalFilters(new ErrorFilter());
   const port = Number(process.env.PORT ?? 4101);
   await app.listen(port, '0.0.0.0');
-  printUrls(port);
+  await printUrls(port);
 }
 bootstrap();
 
-// The addresses other devices on the same Wi-Fi / LAN should open (virtual adapters like WSL, Docker or VPNs skipped).
-const VIRTUAL = /vethernet|wsl|docker|virtualbox|vmware|hyper-v|tailscale|zerotier|netbird|wireguard|vpn|loopback|^w[tg]\d/i;
-const isVpnRange = (ip: string) => /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip); // 100.64.0.0/10
-
-function printUrls(port: number) {
+// The addresses other devices on the same Wi-Fi / LAN should open, plus a QR code for phones in hub mode.
+async function printUrls(port: number) {
   const path = webIndex ? '' : '/api';
   const label = webIndex ? 'App' : 'API';
-  const lan = Object.entries(networkInterfaces())
-    .filter(([name]) => !VIRTUAL.test(name))
-    .flatMap(([, addresses]) => addresses ?? [])
-    .filter((a) => a.family === 'IPv4' && !a.internal && !isVpnRange(a.address))
-    .map((a) => `http://${a.address}:${port}${path}`);
+  const urls = lanAddresses().map((ip) => `http://${ip}:${port}${path}`);
   console.log(`\n${label} on this computer: http://localhost:${port}${path}`);
-  for (const url of lan) console.log(`${label} on the local network: ${url}`);
+  for (const url of urls) console.log(`${label} on the local network: ${url}`);
+  if (webIndex && urls[0]) {
+    console.log(`\nScan to open on a phone (same Wi-Fi):\n${await QRCode.toString(urls[0], { type: 'terminal', small: true })}`);
+  }
 }

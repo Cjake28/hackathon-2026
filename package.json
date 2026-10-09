@@ -4,7 +4,8 @@
   "scripts": {
     "setup": "node scripts/setup-env.mjs && npm install && npm install --prefix api && npm install --prefix web && npm install --prefix mobile",
     "hub": "node scripts/hub.mjs",
-    "ai": "ollama serve",
+    "ai": "node scripts/ai.mjs",
+    "ai:bench": "node scripts/bench.mjs",
     "dev": "concurrently -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
     "dev:api": "npm run dev --prefix api",
     "dev:web": "npm run dev --prefix web",

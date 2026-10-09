@@ -50,7 +50,21 @@ export class RagService {
     });
   }
 
+  // Whole answer at once: { answer, sources }. Use this inside other features.
   async ask(question: string) {
+    const { sources, prompt } = await this.retrieve(question);
+    if (!prompt) return { answer: NOT_FOUND, sources };
+    return { answer: await this.ai.text(prompt, RAG.system), sources };
+  }
+
+  // For the UI: the sources right away, then the answer streamed piece by piece.
+  async askStream(question: string) {
+    const { sources, prompt } = await this.retrieve(question);
+    return { sources, answer: prompt ? this.ai.textStream(prompt, RAG.system) : once(NOT_FOUND) };
+  }
+
+  // Finds the chunks closest in meaning to the question and builds the prompt with numbered sources.
+  private async retrieve(question: string) {
     if (!question?.trim()) throw new BadRequestException('Ask a question first');
     const [query] = await this.ai.embed([question], 'query');
     const vector = toVector(query);
@@ -60,27 +74,28 @@ export class RagService {
       FROM "DocumentChunk" c JOIN "Document" d ON d.id = c."documentId"
       ORDER BY c.embedding <=> ${vector}::vector
       LIMIT ${RAG.topK}`;
-    const sources = matches.filter((m) => Number(m.score) >= RAG.minScore);
-    if (!sources.length) {
-      return { answer: "I couldn't find anything about that in the documents.", sources: [] };
-    }
+    const found = matches.filter((m) => Number(m.score) >= RAG.minScore);
 
-    const context = sources
+    const sources = found.map((s, i) => ({
+      n: i + 1,
+      documentId: s.documentId,
+      title: s.title,
+      page: s.page,
+      snippet: s.content.slice(0, 300),
+      score: Number(s.score),
+    }));
+    const context = found
       .map((s, i) => `[${i + 1}] ${s.title}${s.page ? ` (page ${s.page})` : ''}\n${s.content}`)
       .join('\n\n');
-    const answer = await this.ai.text(`Sources:\n\n${context}\n\nQuestion: ${question}`, RAG.system);
-    return {
-      answer,
-      sources: sources.map((s, i) => ({
-        n: i + 1,
-        documentId: s.documentId,
-        title: s.title,
-        page: s.page,
-        snippet: s.content.slice(0, 300),
-        score: Number(s.score),
-      })),
-    };
+    const prompt = found.length ? `Sources:\n\n${context}\n\nQuestion: ${question}` : null;
+    return { sources, prompt };
   }
+}
+
+const NOT_FOUND = "I couldn't find anything about that in the documents.";
+
+async function* once(text: string) {
+  yield text;
 }
 
 async function extractPages(filename: string, data: Buffer): Promise<Page[]> {

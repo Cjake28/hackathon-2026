@@ -6,6 +6,7 @@ import { AiController } from './ai/ai.controller';
 import { AiService } from './ai/ai.service';
 import { AuthController } from './auth/auth.controller';
 import { AuthGuard } from './auth/auth.guard';
+import { HubController } from './hub.controller';
 import { ItemsController } from './items/items.controller';
 import { PrismaService } from './prisma.service';
 import { RagController } from './rag/rag.controller';
@@ -26,6 +27,7 @@ import { UsersController } from './users/users.controller';
   controllers: [
     AuthController,
     AiController,
+    HubController,
     ItemsController,
     RagController,
     RolesController,

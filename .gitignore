@@ -3,3 +3,4 @@ dist
 .env
 web/src/routeTree.gen.ts
 *.log
+ai-bench.md
