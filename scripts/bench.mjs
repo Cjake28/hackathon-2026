@@ -1,8 +1,10 @@
 // `npm run ai:bench -- qwen3.5:4b gemma4:e4b` (no names = AI_MODEL from api/.env)
-// Asks every model the same questions (English + Tagalog + a JSON task) and compares speed and answers.
+// `npm run ai:bench -- --gpu=auto` / `--gpu=99`: override AI_GPU_LAYERS (auto = let Ollama decide) to compare.
+// Asks every model the same questions (English + Tagalog + a JSON task + a Jarvis tool call) and compares speed,
+// how much of the model is on the GPU, and the answers. Uses the API's settings (AI_CONTEXT, AI_GPU_LAYERS).
 // Answers are saved to ai-bench.md so you can read them side by side.
 import { writeFileSync } from 'node:fs';
-import { MODEL, OLLAMA, installedModels, isInstalled } from './ollama.mjs';
+import { CHAT_OPTIONS, MODEL, OLLAMA, installedModels, isInstalled } from './ollama.mjs';
 
 const QUESTIONS = [
   'What is photosynthesis? Answer in 2 sentences.',
@@ -33,7 +35,36 @@ const QUIZ_SCHEMA = {
 };
 const QUIZ_PROMPT = 'Write 3 multiple-choice quiz questions about the water cycle, 4 choices each.';
 
-const models = process.argv.slice(2).length ? process.argv.slice(2) : [MODEL];
+// A Jarvis turn (api/src/voice/voice.controller.ts): the AI must call set_alarm for Ana with inMinutes 4.
+const JARVIS_SYSTEM =
+  "You are Jarvis, the friendly voice assistant of this family's home hub. You are talking to Mom (parent). " +
+  'Family: Mom (parent), Dad (parent), Ana (child), Ben (child). Answer in 1 or 2 short sentences.';
+const SET_ALARM = {
+  type: 'function',
+  function: {
+    name: 'set_alarm',
+    description: 'Set an alarm or reminder for someone. Use inMinutes for "in 10 minutes", time for a clock time.',
+    parameters: {
+      type: 'object',
+      properties: {
+        person: { type: 'string', description: 'Who it rings for. Leave empty for the speaker' },
+        time: { type: 'string', description: 'Clock time, e.g. "06:30" or "6:30 pm"' },
+        inMinutes: { type: 'integer' },
+        label: { type: 'string' },
+      },
+    },
+  },
+};
+const JARVIS_RUNS = 3;
+
+const args = process.argv.slice(2);
+const gpuFlag = args.find((a) => a.startsWith('--gpu='))?.slice(6);
+const OPTIONS = { ...CHAT_OPTIONS, temperature: 0.2 };
+if (gpuFlag === 'auto') delete OPTIONS.num_gpu;
+else if (gpuFlag) OPTIONS.num_gpu = Number(gpuFlag);
+const gpuSetting = OPTIONS.num_gpu === undefined ? 'auto' : String(OPTIONS.num_gpu);
+const modelArgs = args.filter((a) => !a.startsWith('--'));
+const models = modelArgs.length ? modelArgs : [MODEL];
 const names = await installedModels();
 if (!names) {
   console.error(`Ollama isn't running at ${OLLAMA}. Start it with "npm run ai".`);
@@ -41,8 +72,9 @@ if (!names) {
 }
 
 let thinkOff = true;
-async function chat(model, content, format) {
-  const body = { model, messages: [{ role: 'user', content }], stream: false, format, options: { temperature: 0.2 } };
+async function chat(model, content, format, extra = {}) {
+  const messages = extra.system ? [{ role: 'system', content: extra.system }, { role: 'user', content }] : [{ role: 'user', content }];
+  const body = { model, messages, stream: false, format, tools: extra.tools, options: OPTIONS };
   const res = await fetch(`${OLLAMA}/api/chat`, {
     method: 'POST',
     body: JSON.stringify(thinkOff ? { ...body, think: false } : body),
@@ -50,13 +82,18 @@ async function chat(model, content, format) {
   const data = await res.json();
   if (data.error && /does not support thinking/i.test(data.error) && thinkOff) {
     thinkOff = false;
-    return chat(model, content, format);
+    return chat(model, content, format, extra);
   }
   if (data.error) throw new Error(data.error);
   return data;
 }
 
-const report = ['# AI benchmark', '', `Machine: ${process.platform}, ${new Date().toLocaleString()}`, ''];
+const report = [
+  '# AI benchmark',
+  '',
+  `Machine: ${process.platform}, ${new Date().toLocaleString()}. Context ${OPTIONS.num_ctx}, GPU layers ${gpuSetting}.`,
+  '',
+];
 const summary = [];
 
 for (const model of models) {
@@ -66,9 +103,15 @@ for (const model of models) {
   }
   thinkOff = true;
   console.log(`\n▶ ${model}: loading…`);
-  const load = await fetch(`${OLLAMA}/api/generate`, { method: 'POST', body: JSON.stringify({ model, prompt: '' }) })
+  // Unload first: Ollama reuses an already-loaded copy (e.g. the API's) even when the GPU layers differ.
+  await fetch(`${OLLAMA}/api/generate`, { method: 'POST', body: JSON.stringify({ model, keep_alive: 0 }) });
+  const load = await fetch(`${OLLAMA}/api/generate`, { method: 'POST', body: JSON.stringify({ model, prompt: '', options: OPTIONS }) })
     .then((r) => r.json());
-  report.push(`## ${model}`, '', `Load time: ${(load.load_duration / 1e9 || 0).toFixed(1)} s`, '');
+  // How much of the model sits on the GPU (the rest runs on the CPU, much slower).
+  const loaded = (await fetch(`${OLLAMA}/api/ps`).then((r) => r.json())).models?.find((m) => m.name === model || m.name === `${model}:latest`);
+  const onGpu = loaded?.size ? Math.round((loaded.size_vram / loaded.size) * 100) : 0;
+  console.log(`  ${onGpu}% of the model on the GPU (GPU layers: ${gpuSetting})`);
+  report.push(`## ${model}`, '', `Load time: ${(load.load_duration / 1e9 || 0).toFixed(1)} s. On the GPU: ${onGpu}%.`, '');
 
   let seconds = 0;
   let tokens = 0;
@@ -93,8 +136,26 @@ for (const model of models) {
   console.log(`  ${((Date.now() - started) / 1000).toFixed(1)}s  JSON quiz: ${jsonOk ? 'valid' : 'INVALID'}`);
   report.push(`**${QUIZ_PROMPT}** (JSON ${jsonOk ? 'valid' : 'invalid'})`, '', '```json', quiz.message.content.trim(), '```', '');
 
+  // Jarvis tool call, timed like a voice turn (median of JARVIS_RUNS).
+  const turns = [];
+  let toolOk = 0;
+  for (let i = 0; i < JARVIS_RUNS; i++) {
+    const t0 = Date.now();
+    const data = await chat(model, 'Wake Ana up in four minutes', undefined, { system: JARVIS_SYSTEM, tools: [SET_ALARM] });
+    turns.push((Date.now() - t0) / 1000);
+    const call = data.message.tool_calls?.[0]?.function;
+    if (call?.name === 'set_alarm' && Number(call.arguments?.inMinutes) === 4 && /ana/i.test(call.arguments?.person ?? '')) toolOk++;
+  }
+  const turn = turns.sort((a, b) => a - b)[Math.floor(turns.length / 2)];
+  console.log(`  ${turn.toFixed(1)}s  Jarvis tool call (median of ${JARVIS_RUNS}): ${toolOk}/${JARVIS_RUNS} correct`);
+  report.push(`**Jarvis: "Wake Ana up in four minutes"** → set_alarm correct ${toolOk}/${JARVIS_RUNS}, median ${turn.toFixed(1)} s`, '');
+
   summary.push({
     model,
+    'GPU layers': gpuSetting,
+    'on GPU': `${onGpu}%`,
+    'Jarvis turn (s)': turn.toFixed(1),
+    'tool call': `${toolOk}/${JARVIS_RUNS}`,
     'seconds per answer': (seconds / QUESTIONS.length).toFixed(1),
     'words/sec (≈tokens/sec)': (tokens / (generating || 1)).toFixed(1),
     'JSON quiz': jsonOk ? 'valid' : 'invalid',

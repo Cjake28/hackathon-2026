@@ -1,11 +1,9 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, ParseIntPipe, Post } from '@nestjs/common';
 import { Can, CurrentUser } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.guard';
-import { FAKE_MEMORY } from '../fake';
 import { PrismaService } from '../prisma.service';
 
-// Owner: Brain dev. STUB: returns fake data in the final shape (TEAM-PLAN.md 4.5). #9
-// "What Jarvis remembers about me". Real version: only my own notes; they also go into the Jarvis prompt.
+// Owner: Brain dev. #9 "What Jarvis remembers about me": only your own notes. They also go into the Jarvis prompt.
 @Controller('memory')
 @Can('memory.own')
 export class MemoryController {
@@ -14,16 +12,20 @@ export class MemoryController {
   // → MemoryNote[]
   @Get()
   list(@CurrentUser() user: AuthUser) {
-    return FAKE_MEMORY;
+    return this.prisma.memoryNote.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' } });
   }
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() body: { text: string }) {
-    return { id: 99, userId: user.id, text: body.text, createdAt: new Date().toISOString() };
+    const text = body.text?.trim();
+    if (!text) throw new BadRequestException('Write something to remember');
+    return this.prisma.memoryNote.create({ data: { userId: user.id, text } });
   }
 
   @Delete(':id')
-  remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
-    return { ...FAKE_MEMORY[0], id };
+  async remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
+    const note = await this.prisma.memoryNote.findFirst({ where: { id, userId: user.id } });
+    if (!note) throw new NotFoundException('Memory not found');
+    return this.prisma.memoryNote.delete({ where: { id } });
   }
 }

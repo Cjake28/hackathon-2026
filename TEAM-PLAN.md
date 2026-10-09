@@ -1,13 +1,31 @@
 # Family Hub ("Jarvis"): Team Plan
 
-24-hour hackathon. 3 devs + 1 UI. Everyone builds alone against **one contract** (this file) and you connect at the end.
+**6-hour hackathon.** 3 devs + 1 UI. Everyone builds alone against **one contract** (this file) and you connect at the end.
 
-**How there are no blockers:** in the first 90 minutes (H0) one commit adds every table, role, endpoint and AI tool as a
+**How there are no blockers:** at kickoff (H0, done) one commit adds every table, role, endpoint and AI tool as a
 **stub that returns fake data in the final shape**. After that commit:
 
-- the UI hits real URLs from hour 2 (no mock JSON needed),
+- the UI hits real URLs from the start (no mock JSON needed),
 - every dev owns their own files, so merges don't conflict,
 - anything that talks to another part (`speak()`, `notify()`) is fire-and-forget, so it works even when that part isn't running.
+
+> **Changed after the plan review. Read this if you read the plan before:**
+> 1. The alarm rule ("Mom set that one") already lives in Brain's `tools.ts` on `brain`. Hub's REST routes reuse that
+>    function instead of writing their own (4.2), so voice and the UI give the same answer.
+> 2. The demo alarm is "in four minutes", so it doesn't ring in the middle of steps 2–5 (section 2). `inMinutes` means
+>    exactly now + N everywhere, including Hub's `POST /alarms`.
+> 3. Brain follow-ups (Brain section): the chore check sends only the after photo; `/voice/command` only from the hub
+>    itself; export `alarmICanChange`; rate-limit `/voice/text`.
+> 4. The Cloudflare tunnel (section 9) makes the hub reachable from outside. Two consequences: a tunnelled request looks
+>    like it comes from 127.0.0.1, and a phone polling through the tunnel isn't home (Hub step 6, Brain follow-ups).
+> 5. A voice turn should take under 6 s on the hub laptop; measured at the 2:30 merge.
+> 6. `CLAUDE.md`: frontend is `web`. Online extras now include Google sign-in. The AI stays local and the core still
+>    works with the internet off.
+
+> **Brain is merged into `main`** (Jarvis, all family AI tools, briefing, memory, chore photo check, location + Map page).
+> After `git pull`: `npm install --prefix web` (map libraries), `npm run db:push` (Location + Place tables),
+> `npm run db:seed` (new permissions + places). `/voice/*`, `/briefing` and `/chores` now call the real AI: run Ollama
+> (`npm run ai`, model `qwen3.5:4b`) or test them against the hub laptop. Everything else still answers without Ollama.
 
 ---
 
@@ -37,19 +55,26 @@ Judges see 3–5 minutes. Build in this order and cut from the bottom.
 |---|---|---|
 | **P0** (no demo without it) | #2 voice (push-to-talk first), #3 voice ID, #6 roles, #7 guest, #25 alarm, #28 parent sets kid's alarm, #12 task relay + device page, #13 + #4 chore photo check | Every demo moment below uses these |
 | **P1** | wake word "hey jarvis", #29 reminders (free: an alarm with `kind: "reminder"`), #58 grocery (free: Items), #30 morning briefing, #9 memory, #50 who's home | Cheap once P0 works |
-| **P2** (only if on time at H14) | calendar page, budget page, arrival announcement that reads out chores | Seed calendar data anyway so the briefing sounds good |
+| **P2** (only if on time at 4:00) | calendar page, budget page, arrival announcement that reads out chores | Seed calendar data anyway so the briefing sounds good |
 | **Freebie** | #5 Tagalog/Taglish | Use the multilingual Whisper model + "reply in the user's language" and it mostly works |
+
+**6 hours means:** push-to-talk first (wake word only if the chain works by 4:00), voice ID for 2–3 people, and no
+calendar/budget pages (they already work by voice through the Brain tools).
 
 ### The 4-minute demo (everything is built for this)
 
-1. **Mom:** "Hey Jarvis, wake Ana up in one minute." → "Set a wake-up alarm for Ana at 2:31 PM? Say yes." → "Yes." *(#2 #3 #28 #6)*
-2. **Ana:** "Hey Jarvis, delete my wake-up alarm." → "Sorry Ana, Mom set that one." *(permissions)*
+1. **Mom:** "Hey Jarvis, wake Ana up in four minutes." → "Set a wake-up alarm for Ana at 2:34 PM? Say yes." → "Yes." *(#2 #3 #28 #6)*
+2. **Ana:** "Hey Jarvis, delete my wake-up alarm." → "Sorry Ana, Mom set that one." Right away, no "say yes" first. *(permissions)*
 3. **A judge speaks:** "Hey Jarvis, who's home?" → "I don't recognize your voice, so I can't share family info." *(#7 guest)*
 4. **Mom:** "Give Ana a chore: wash the dishes." → task pops up on Ana's phone and the hub announces it. *(#12)*
-5. **Ana's phone:** before photo, then a half-done after photo → "Almost! Two cups are still in the sink." → retake → "Approved." *(#13 #4)*
+5. **Ana's phone:** before photo, then a half-done after photo → "Almost! There are still cups in the sink." → retake → "Approved." *(#13 #4)*
 6. The alarm from step 1 rings on Ana's phone and the hub says "Ana, wake up!" *(#25)*
 7. **Ana:** "Good morning, Jarvis." → "Good morning Ana! Piano at 4, one chore left, and you said you like adobo, which is on the grocery list." *(#30 #9 #58)*
 8. Turn off the Wi-Fi internet. It keeps working. "Your voice and photos never left this laptop." *(#1, privacy)*
+
+**Timing:** the alarm must not ring before step 6. While it rings, the hub repeats "Ana, wake up!" every minute and the
+mic is muted while the hub talks, so nobody can give commands. Steps 2–5 take about 3–4 minutes (two photo checks).
+Rehearse with a stopwatch and change "four minutes" to fit.
 
 ---
 
@@ -60,11 +85,11 @@ Judges see 3–5 minutes. Build in this order and cut from the bottom.
 | **Hub dev** (TS) | Database, roles, alarms + scheduler, tasks, device poll, who's home, calendar/budget (P2) | #6 #7(roles) #25 #28 #29 #12 #50 #58(data) | `curl` / Postman |
 | **Brain dev** (TS) | Voice command endpoint, AI tools, Jarvis prompt, memory, briefing, chore vision | #1 #9 #30 #4 #13, the AI side of everything | `curl` with typed text + a speaker id |
 | **Voice dev** (Python) | Mic, wake word, speech-to-text, voice ID, text-to-speech, the hub laptop's audio setup | #2 #3 #7(detect unknown voice) | Console prints `[Mom 0.91] set an alarm...` |
-| **UI dev** | Every screen in `web/` | Device page (#34), dashboard, all pages | Real stub endpoints from H2 |
+| **UI dev** | Every screen in `web/` | Device page (#34), dashboard, all pages | Real stub endpoints from the start |
 
 **Hub laptop = the Brain dev's laptop** (RTX 3050 4 GB, 16 GB RAM, i5-12450H). It runs `qwen3.5:4b`, which has vision ✓ and tools ✓.
 The Brain dev builds on it. The Voice dev develops on their own laptop with `--mock` and moves the mic setup to the hub
-laptop at H8. Demo day runs entirely on this laptop.
+laptop at the 2:30 merge. Demo day runs entirely on this laptop.
 
 ### File ownership. Never edit a file you don't own; ask the owner in the group chat.
 
@@ -72,11 +97,11 @@ laptop at H8. Demo day runs entirely on this laptop.
 |---|---|
 | `api/prisma/schema.prisma`, `api/prisma/seed.ts`, `api/src/auth/permissions.ts`, `api/src/app.module.ts`, `api/src/family.ts` | **Hub** (locked after H0: changes get announced first) |
 | `api/src/alarms/`, `api/src/tasks/`, `api/src/device/`, `api/src/calendar/`, `api/src/budget/`, `api/src/scheduler.service.ts` | **Hub** |
-| `api/src/ai/` (incl. `tools.ts`), `api/src/voice/`, `api/src/chores/`, `api/src/memory/`, `api/src/briefing/` | **Brain** |
+| `api/src/ai/` (incl. `tools.ts`), `api/src/voice/`, `api/src/chores/`, `api/src/memory/`, `api/src/briefing/`, `api/src/location/`, `web/src/routes/_app/map.tsx` | **Brain** |
 | `voice/` | **Voice** |
 | `web/` (and `mobile/` if you use it, but web-only is recommended: phones open the hub URL) | **UI** |
 
-Git: after the H0 commit everyone branches (`hub`, `brain`, `voice`, `ui`) and merges to `main` at H8, H14, H18.
+Git: after the H0 commit everyone branches (`hub`, `brain`, `voice`, `ui`) and merges to `main` at 2:30, 4:00 and 5:00.
 Because files are owned, these merges should be clean.
 
 **If you build with Claude/Copilot:** tell it "Read TEAM-PLAN.md. The contract (names, routes, JSON shapes) is fixed. Only edit files I own."
@@ -199,6 +224,9 @@ Seed also: 3 events today/tomorrow ("Ana piano 4 PM", "Family dinner at Lola's S
 1 pending chore for Ana with a checklist. A good seed is what makes the briefing and the demo sound smart.
 
 Rule (Hub): **a child can't delete or disable an alarm a parent created** → 403 `"Mom set that alarm."`
+Brain already wrote this rule as `alarmICanChange(prisma, user, id)` in `api/src/ai/tools.ts` (on `brain`; voice uses it).
+Hub's `PATCH` / `DELETE /alarms/:id` call the same function (Brain exports it) instead of writing a second copy, so voice
+and the UI always give the same answer.
 
 ### 4.3 Shared helpers: `api/src/family.ts` (Hub writes it at H0; everyone calls it)
 
@@ -309,9 +337,9 @@ Grocery = existing `/items` routes, unchanged.
 
 | Method | Path | Permission | Body → Returns |
 |---|---|---|---|
-| POST | `/voice/command` | `@Public()` + header `x-hub-key` | `{ speakerId: number \| null, confidence: number, text: string }` → `VoiceReply`. `null` = guest |
-| POST | `/voice/text` | login (speaker = me) | `{ text }` → `VoiceReply`. Typed Jarvis, also the on-stage fallback |
-| GET | `/voice/people` | `@Public()` + `x-hub-key` | → `{ id, name, role }[]` (for voice enrollment) |
+| POST | `/voice/command` | `@Public()` + header `x-hub-key` + only from the hub itself | `{ speakerId: number \| null, confidence: number, text: string }` → `VoiceReply`. `null` = guest |
+| POST | `/voice/text` | ai.use + `ThrottlerGuard` (speaker = me) | `{ text }` → `VoiceReply`. Typed Jarvis, also the on-stage fallback |
+| GET | `/voice/people` | `@Public()` + `x-hub-key` + only from the hub itself | → `{ id, name, role }[]` (for voice enrollment) |
 | POST | `/chores/:taskId/photo` | tasks.own (assignee) | `{ stage: "before" \| "after", image: base64 }` → `Task` (after: status + feedback filled by the AI, `task:reviewed` notice to the parent) |
 | GET | `/briefing` | ai.use | → `{ text }` (spoken-style morning summary for me) |
 | GET/POST/DELETE | `/memory`, `/memory/:id` | memory.own | `{ text }` → `MemoryNote` (own notes only) |
@@ -342,7 +370,12 @@ changes are `confirm: true`.
 | `remember` | `{ text }` | memory.own | yes |
 | `morning_briefing` | `{}` | ai.use | no |
 
-`inMinutes` exists for the demo: nobody waits until 6 AM on stage.
+`inMinutes` exists for the demo: nobody waits until 6 AM on stage. It rings at exactly now + N; don't go through
+`nextAt(time)`, which zeroes the seconds, so "in 1 minute" would ring anywhere from 0 to 60 s later.
+
+**Check before asking** (done on `brain`): a confirm tool can have `check(args, deps)`. The voice loop runs it before
+proposing the action, and a refusal is spoken right away instead of "Say yes" (demo step 2). Guests get no tools, and
+`search_documents` isn't offered to voice.
 
 ### 4.7 Env vars
 
@@ -366,6 +399,10 @@ changes are `confirm: true`.
 Already real: permission checks (`@Can`), the hub-key check and speaker lookup in `/voice/command`, and `/voice/people`.
 Everything else returns fake data. When your endpoint is real, stop importing from `fake.ts`.
 
+**H0 follow-up:**
+
+- [x] `CLAUDE.md`: frontend set to `web`, so nobody's Claude builds mobile screens. `mobile/` stays on disk, untouched.
+
 **Start here (everyone):**
 
 ```
@@ -384,7 +421,8 @@ User ids after a fresh seed: Admin 1, Mom 2, Dad 3, Ana 4, Ben 5, Guest 6.
 ### Hub dev
 
 1. **Roles live.** Log in as Ana: `POST /alarms` with `userId` = Mom → 403. Log in as Mom → works.
-2. **Alarms CRUD** using `nextAt()`; `inMinutes` → `time` = now + N. Rule: a child can't delete or disable a parent's alarm.
+2. **Alarms CRUD** using `nextAt()`; `inMinutes` → `nextAt` = now + N exactly (like the `set_alarm` tool). Rule: a child
+   can't delete or disable a parent's alarm: call Brain's `alarmICanChange()` (4.2), don't write a second copy.
 3. **Scheduler** (`scheduler.service.ts`, `setInterval` every 10 s in `onApplicationBootstrap`): `enabled && nextAt <= now && !ringingAt`
    → set `ringingAt`, `notify(userId, 'alarm:ring', label, { alarmId })`, `speak("<Name>, <label>!")`. While ringing,
    repeat `speak` every 60 s. (Later, #27: after 5 min, notify parents.)
@@ -393,13 +431,16 @@ User ids after a fresh seed: Admin 1, Mom 2, Dad 3, Ana 4, Ben 5, Guest 6.
 6. **Device poll:** notices `where id > after AND (toUserId = me OR toUserId IS NULL)`, ringing alarms for me, people home
    (`lastSeenAt` within 2 min). Update `lastSeenAt`/`lastIp`. If my previous `lastSeenAt` was over 10 min ago or null
    → `presence:arrived` notice to everyone + `speak("Welcome home, Ana")`.
+   A poll that came **through the Cloudflare tunnel** (it has a `cf-connecting-ip` header) doesn't count as home: that
+   phone may be at school. Only polls over the home Wi-Fi update home presence.
 7. **`/family`** with `isHome`.
-8. P2: events, expenses, budget summary.
+8. **Demo seed:** times relative to now (piano = now + 2 h, not a fixed 4 PM), so the briefing is right whenever you demo.
+9. P2: events, expenses, budget summary.
 
 **Done alone when:** a curl script creates an alarm with `inMinutes: 1` for Ana, and within ~70 s Ana's `/device/poll`
 returns it in `ringing` plus an `alarm:ring` notice.
 
-### Brain dev
+### Brain dev: DONE and merged to `main` (Jarvis + location)
 
 1. **`/voice/text` first** (needs no voice and no hub key). Copy `agentReply()` from `conversations.controller.ts`
    (duplication is fine). The system prompt adds: Jarvis personality, **reply in 1–2 short sentences, no Markdown (it's
@@ -423,15 +464,43 @@ returns it in `ringing` plus an `alarm:ring` notice.
 **Done alone when:** `curl /voice/text "wake Ana up in 1 minute"` as Mom → pending → `"yes"` → the alarm row exists.
 As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" → refused.
 
+**Follow-ups from the plan review: all done** (tested live on the hub laptop):
+
+- [x] **Chore check: send only the after photo** with the checklist (3.6 s → under 1 s with the GPU fix below).
+      Comparing two photos is what small vision models do worst, and two images double the wait. Keep the before photo
+      for the parent's view, and rehearse with the same sink and cups you'll use on stage.
+- [x] **`/voice/command` and `/voice/people` only from the hub itself** (tunnel and LAN requests get 403). Accept `req.ip` `127.0.0.1` / `::1` /
+      `::ffff:127.0.0.1` **with no `cf-connecting-ip` header**. The tunnel's `cloudflared` runs on the hub, so a request
+      from the internet also arrives from 127.0.0.1. Without this, the hub key alone lets anyone speak as Mom.
+- [x] **Export `alarmICanChange`** from `tools.ts` (the Hub dev made the same one-line change on `hub`), so Hub's REST routes use the same rule (4.2).
+- [x] **`ThrottlerGuard` on `/voice/text`** (it's an AI endpoint, see `CLAUDE.md`).
+- [x] **Speed: target met, 1.4–3.1 s per typed turn** (was 5–8 s). The cause wasn't the prompt: Ollama kept half of
+      the model on the CPU (46% on the GPU, 12.7 tokens/s). `AI_GPU_LAYERS=99` in `api/.env` puts every layer on the
+      RTX 3050 (100%, 43 tokens/s), and embeddings run on the CPU so they can't push it off. Keyword routing was tried and
+      dropped: barely faster, and it made a Tagalog alarm request fail.
+
+      `npm run ai:bench -- --gpu=auto` vs `--gpu=99` (fresh load each, qwen3.5:4b, context 8192):
+
+      | GPU layers | On GPU | Tokens/s | Seconds per answer | Jarvis tool call | Correct | JSON |
+      |---|---|---|---|---|---|---|
+      | auto (Ollama decides) | 46% | 12.7 | 17.9 | 2.9 s | 3/3 | valid |
+      | **99 (hub laptop)** | **100%** | **43.1** | **6.0** | **0.9 s** | 3/3 | valid |
+
+      Keep the GPU free on demo day: in Windows Settings → Display → Graphics, set Chrome/Edge to "Power saving" (Intel GPU),
+      and close games. Only ~80 MB of the 4 GB is left.
+
 ### Voice dev
 
-1. **Spike first (H0–H3) on the hub laptop:** get each library printing results. If one won't install on Windows within
+1. **Spike first (first 45 minutes):** get each library printing results. If one won't install on Windows within
    30 min, switch to the fallback.
    - Mic: `sounddevice`, 16 kHz mono
    - Speech-to-text: `faster-whisper`, **multilingual** `small` (or `base` if slow), int8 on CPU. This makes Tagalog nearly free.
+     Use `vad_filter=True`: without it, Whisper makes up text from silence ("Thank you for watching").
    - Wake word: `openwakeword` has a ready **`hey_jarvis`** model (use `inference_framework="onnx"` on Windows)
    - Voice ID: SpeechBrain ECAPA (`speechbrain/spkrec-ecapa-voxceleb`) + cosine similarity; fallback `resemblyzer`
-   - Text-to-speech: `pyttsx3` (Windows voices, offline, no download)
+   - Text-to-speech: `pyttsx3` (Windows voices, offline, no download). It can hang after the first sentence when run from
+     a thread. Fallback: `win32com.client.Dispatch("SAPI.SpVoice").Speak(text)`, with `pythoncom.CoInitialize()` in that
+     thread. Offline, Taglish is read by an English voice (ElevenLabs in section 9 fixes that when online).
    - All-in-one fallback if the above fights you: `sherpa-onnx` (keyword spotting, speech-to-text, speaker ID, text-to-speech)
 2. **Push-to-talk first** (Enter = record until silence or 8 s). Add the wake word after the whole chain works.
 3. **Enrollment CLI:** `python enroll.py --user-id 4` records 3–5 sentences and saves the averaged embedding to
@@ -474,15 +543,14 @@ the last hours to connect lose the demo.
 | When | What |
 |---|---|
 | **Before the event** (needs internet) | Pick the hub laptop (best GPU/RAM). `ollama pull` a chat model that shows **vision ✓ tools ✓** on AI Settings (`npm run ai:bench` to compare). Voice dev installs Python deps and downloads every model **on the hub laptop**. `npm run setup`, Docker image pulled. Bring a headset/USB mic, a speaker and a phone for hotspot |
-| H0–H1.5 | Contract commit (section 5) |
-| H1.5–H8 | Build alone. Each dev reaches their "done alone when" |
-| **H8 merge (30 min)** | Typed chain: `/voice/text` as Mom → alarm → Ana's device page rings. No voice yet |
-| H8–H14 | Real logic everywhere. Voice dev connects to `/voice/command` on the hub laptop |
-| **H14 merge (30 min)** | Full voice chain on the hub laptop. Decide P2 cuts now |
-| H14–H18 | P1/P2, chore vision tuning, demo seed data |
-| **H18: FEATURE FREEZE** | Bugs only, on the real hub laptop + real phones + hotspot |
-| H20–H22 | Rehearse the demo 3 times, record a backup video, `npm run backup` |
-| H22–H24 | Buffer, pitch slides (P2 and second-tier features go on the roadmap slide) |
+| 0:00–0:30 | Setup commit (done) |
+| 0:30–2:30 | Build alone. Each dev reaches their "done alone when" |
+| **2:30 merge (20 min)** | Typed chain: `/voice/text` as Mom → alarm → Ana's device page rings. No voice yet. Time a turn on the hub laptop: **target under 6 s** |
+| 2:50–4:00 | Real logic everywhere. Voice dev connects to `/voice/command` on the hub laptop |
+| **4:00 merge (20 min)** | Full voice chain on the hub laptop. Cut whatever isn't working |
+| 4:20–5:00 | P1 polish, demo seed data, online extras only if the core works |
+| **5:00: FEATURE FREEZE** | Rehearse the demo 3 times on the hub laptop + real phones with a stopwatch (alarm timing), record a backup video, `npm run backup`. Right before going on stage: `npm run db:seed` and open every demo phone's device page |
+| 5:30–6:00 | Pitch (second/third-tier features go on the roadmap slide) |
 
 ---
 
@@ -497,6 +565,10 @@ the last hours to connect lose the demo.
 | Camera won't open on phone | File input with `capture`, not `getUserMedia` |
 | Venue Wi-Fi blocks devices from seeing each other | Phone hotspot for the hub + phones; allow Node in Windows Firewall (Private) |
 | Vision is slow on CPU | The hub says "let me take a look…" while it checks; keep photos small (resize to ~768 px) |
+| Chore check says the wrong thing | Only the after photo + checklist goes to the AI; rehearse with the same sink and cups |
+| Every voice turn is slow | Under-6-s target at 2:30; keyword routing; yes/no skips the AI; typed `/voice/text` as backup |
+| The alarm rings in the middle of another demo step | Rehearse with a stopwatch; change "in four minutes" to fit |
+| "Welcome home, Ana" interrupts the demo (a phone woke up after 10+ min) | Open every demo phone's device page before you start; keep screens on |
 | Hub laptop sleeps | Power plugged in, sleep off |
 | Everything breaks on stage | Backup video + `npm run restore` to a known-good DB |
 
@@ -504,5 +576,46 @@ the last hours to connect lose the demo.
 
 - Audio is transcribed in memory and never saved. Voice profiles stay in `voice/profiles/` on the hub.
 - Chore photos and memory notes stay in the hub's Postgres.
-- No cloud APIs, CDNs or remote fonts (see `CLAUDE.md`). Only small results would ever go online (third-tier features).
+- Online services only for extras (section 9, Google sign-in; see `CLAUDE.md`). They only get small results (reply text,
+  map tiles, coordinates when someone asks where Ana is, a login), never audio, photos or memory notes. The hub keeps working when
+  they're offline.
 - Guests never get family data: the `guest` role has only `ai.use`, and permissions are checked in the API, never in the AI prompt.
+- The prompt is data too: a guest's prompt never contains family info (who's home, memory notes), because anything in the
+  prompt can come out in the reply. (Done on `brain`: guests get their own prompt and no tools.)
+- Only the hub itself may call `/voice/command`: the hub key alone isn't enough, since the API is open to the whole Wi-Fi
+  and, through the tunnel, the internet.
+
+## 9. Online extras (only after the core works; the hub must still work with the internet off)
+
+### ElevenLabs voice (#5 Filipino). Voice dev, after the 4:00 merge
+
+Only text-to-speech goes online. Speech-to-text stays local (Whisper), so recordings never leave the house.
+`ELEVENLABS_API_KEY` goes in `voice/.env`. Inside `/speak`:
+
+```
+text → spoken before?            → play the saved audio file (instant, no credits)
+     → online + key + credits?   → ElevenLabs (fast multilingual model), wait max 2 s
+                                      ok        → play it + save it for next time
+                                      slow/fail → local voice
+     → offline                   → local voice (Kokoro, pyttsx3 as backup)
+after speaking → unmute the mic
+```
+
+One voice for everything when online (English and Filipino), so Jarvis doesn't sound like two people.
+Demo line: pull the internet and Jarvis keeps talking with the local voice.
+
+### Location (#51 "Where is Ana?", #52 safe zones). Brain dev
+
+- The phone shares GPS from the web app's **Map** page. Phone browsers only share GPS over HTTPS, so the phone opens the
+  hub through a Cloudflare quick tunnel: `cloudflared tunnel --url http://localhost:4101` (hub mode) prints an
+  `https://….trycloudflare.com` address. That also works when the phone is away from home.
+- The hub stores each person's last location and checks it against **places** (home, school, Lola's, with a radius).
+  Arriving at a place → `presence:arrived` notice + the hub says "Ana arrived at School".
+- Jarvis: "Where is Ana?" → `where_is` tool (parents only: `location.read`). With Google: "Ana is near SM Megamall, about
+  15 minutes from Home by car" (Geocoding + Routes APIs, called by the hub only when someone asks; #57 arrival estimate).
+- Map page: **Google Maps** when a key is set, **Leaflet + OpenStreetMap** (free, no key) when it isn't. Same features on both.
+- Keys (Brain dev's GCP credits): enable **Maps JavaScript API, Geocoding API, Routes API**.
+  `VITE_GOOGLE_MAPS_KEY` in `web/.env` (browser key, restrict to `localhost` and `*.trycloudflare.com`),
+  `GOOGLE_MAPS_KEY` in `api/.env` (server key for geocoding and travel time). No key → everything still works, just plainer.
+- Locations are stored on the hub. Google only gets coordinates when someone asks "Where is Ana?" or opens the map.
+- Demo: everyone is in the same room, so make a place called "School" around the venue with "Add place here".
