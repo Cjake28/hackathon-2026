@@ -464,18 +464,30 @@ returns it in `ringing` plus an `alarm:ring` notice.
 **Done alone when:** `curl /voice/text "wake Ana up in 1 minute"` as Mom → pending → `"yes"` → the alarm row exists.
 As Ana: "delete my wake-up alarm" → a polite refusal. As guest: "who's home?" → refused.
 
-**Follow-ups from the plan review** (small; before the 2:30 merge if you can):
+**Follow-ups from the plan review: all done** (tested live on the hub laptop):
 
-- [ ] **Chore check: send only the after photo** with the checklist. `chores.controller.ts` now sends before + after.
+- [x] **Chore check: send only the after photo** with the checklist (3.6 s → under 1 s with the GPU fix below).
       Comparing two photos is what small vision models do worst, and two images double the wait. Keep the before photo
       for the parent's view, and rehearse with the same sink and cups you'll use on stage.
-- [ ] **`/voice/command` and `/voice/people` only from the hub itself.** Accept `req.ip` `127.0.0.1` / `::1` /
+- [x] **`/voice/command` and `/voice/people` only from the hub itself** (tunnel and LAN requests get 403). Accept `req.ip` `127.0.0.1` / `::1` /
       `::ffff:127.0.0.1` **with no `cf-connecting-ip` header**. The tunnel's `cloudflared` runs on the hub, so a request
       from the internet also arrives from 127.0.0.1. Without this, the hub key alone lets anyone speak as Mom.
-- [ ] **Export `alarmICanChange`** from `tools.ts`, so Hub's REST routes use the same rule (4.2).
-- [ ] **`ThrottlerGuard` on `/voice/text`** (it's an AI endpoint, see `CLAUDE.md`).
-- [ ] **Speed:** at the 2:30 merge, time a typed turn on the hub laptop. Target under 6 s. Slower → keyword routing first
-      (alarm|wake|gising|remind → alarm tools, no AI call), the `ai.json` router (step 5) only when nothing matches.
+- [x] **Export `alarmICanChange`** from `tools.ts` (the Hub dev made the same one-line change on `hub`), so Hub's REST routes use the same rule (4.2).
+- [x] **`ThrottlerGuard` on `/voice/text`** (it's an AI endpoint, see `CLAUDE.md`).
+- [x] **Speed: target met, 1.4–3.1 s per typed turn** (was 5–8 s). The cause wasn't the prompt: Ollama kept half of
+      the model on the CPU (46% on the GPU, 12.7 tokens/s). `AI_GPU_LAYERS=99` in `api/.env` puts every layer on the
+      RTX 3050 (100%, 43 tokens/s), and embeddings run on the CPU so they can't push it off. Keyword routing was tried and
+      dropped: barely faster, and it made a Tagalog alarm request fail.
+
+      `npm run ai:bench -- --gpu=auto` vs `--gpu=99` (fresh load each, qwen3.5:4b, context 8192):
+
+      | GPU layers | On GPU | Tokens/s | Seconds per answer | Jarvis tool call | Correct | JSON |
+      |---|---|---|---|---|---|---|
+      | auto (Ollama decides) | 46% | 12.7 | 17.9 | 2.9 s | 3/3 | valid |
+      | **99 (hub laptop)** | **100%** | **43.1** | **6.0** | **0.9 s** | 3/3 | valid |
+
+      Keep the GPU free on demo day: in Windows Settings → Display → Graphics, set Chrome/Edge to "Power saving" (Intel GPU),
+      and close games. Only ~80 MB of the 4 GB is left.
 
 ### Voice dev
 

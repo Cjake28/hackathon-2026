@@ -341,7 +341,7 @@ async function person(prisma: PrismaService, name: string | undefined, me: AuthU
 }
 
 // A child can't delete an alarm a parent set (the demo's "Sorry Ana, Mom set that one").
-async function alarmICanChange(prisma: PrismaService, user: AuthUser, id: number) {
+export async function alarmICanChange(prisma: PrismaService, user: AuthUser, id: number) {
   const alarm = await prisma.alarm.findUnique({ where: { id } });
   if (!alarm) throw new NotFoundException(`There is no alarm number ${id}.`);
   const parent = hasPermission(user.permissions, 'alarms.family');

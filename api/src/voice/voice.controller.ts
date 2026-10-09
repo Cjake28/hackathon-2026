@@ -8,12 +8,16 @@ import {
   HttpException,
   NotFoundException,
   Post,
+  Req,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Prisma } from '@prisma/client';
+import type { FastifyRequest } from 'fastify';
 import { AiService, type AiMessage, type ChatMessage } from '../ai/ai.service';
 import { checkTool, runTool, toolSpecs, toolsFor } from '../ai/tools';
-import { CurrentUser, Public } from '../auth/auth.decorators';
+import { Can, CurrentUser, Public } from '../auth/auth.decorators';
 import { toAuthUser, type AuthUser } from '../auth/auth.guard';
 import { BRIEFING_SYSTEM, briefingFacts, say } from '../briefing/briefing-facts';
 import { notify } from '../family';
@@ -28,6 +32,7 @@ const GUEST_EMAIL = 'guest@family.local'; // every unknown voice speaks as this 
 const YES = /^(yes|yeah|yep|yup|oo|opo|oho|sige|go|okay|ok|confirm|sure|do it|tama)\b/i;
 const NO = /^(no|nope|hindi|huwag|wag|cancel|stop|never mind|ayaw)\b/i;
 const CONFIRM_SECONDS = 60; // a proposed action waits this long for "yes"
+const LOCALHOST = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
 const RECENT_MINUTES = 5; // earlier voice messages the AI sees, for follow-ups
 // "Good morning, Jarvis" always gives the briefing (#30): too important for the demo to leave to the model.
 const BRIEFING = /^(good morning|morning|magandang umaga)\b|what('s| is) (my|the) (day|schedule)|ano.*(gagawin|schedule) ko/i;
@@ -45,11 +50,11 @@ export class VoiceController {
     private rag: RagService,
   ) {}
 
-  // From the Python voice service. speakerId null = unknown voice → the Guest user. → VoiceReply
+  // From the Python voice service on the hub. speakerId null = unknown voice → the Guest user. → VoiceReply
   @Public()
   @Post('command')
-  async command(@Headers('x-hub-key') key: string | undefined, @Body() body: VoiceCommand) {
-    this.checkKey(key);
+  async command(@Req() req: FastifyRequest, @Headers('x-hub-key') key: string | undefined, @Body() body: VoiceCommand) {
+    this.onlyTheHub(req, key);
     const where = body.speakerId ? { id: body.speakerId } : { email: GUEST_EMAIL };
     const user = await this.prisma.user.findUnique({ where, include: { role: true } });
     if (!user) throw new NotFoundException(body.speakerId ? `No user with id ${body.speakerId}` : 'Run npm run db:seed (no Guest user)');
@@ -57,6 +62,9 @@ export class VoiceController {
   }
 
   // Typed Jarvis from the web ("Type to Jarvis" box, the on-stage fallback). Speaker = the logged-in user.
+  @Can('ai.use')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } }) // the hub's AI is shared: 20 turns/minute per device
   @Post('text')
   text(@CurrentUser() user: AuthUser, @Body() body: { text: string }) {
     return this.handle(user, body.text, 1);
@@ -65,13 +73,19 @@ export class VoiceController {
   // For voice enrollment: who can be enrolled, with real ids. → { id, name, role }[]
   @Public()
   @Get('people')
-  async people(@Headers('x-hub-key') key: string | undefined) {
-    this.checkKey(key);
+  async people(@Req() req: FastifyRequest, @Headers('x-hub-key') key: string | undefined) {
+    this.onlyTheHub(req, key);
     const users = await this.prisma.user.findMany({ orderBy: { id: 'asc' }, include: { role: true } });
     return users.map((u) => ({ id: u.id, name: u.name, role: u.role.name }));
   }
 
-  private checkKey(key: string | undefined) {
+  // The voice service runs on the hub, so it calls from 127.0.0.1. The Cloudflare tunnel's cloudflared also runs on the
+  // hub, so internet requests arrive from 127.0.0.1 too, but with a cf-connecting-ip header: refuse those. Without
+  // this, the hub key alone would let anyone on the internet speak as Mom.
+  private onlyTheHub(req: FastifyRequest, key: string | undefined) {
+    if (!LOCALHOST.includes(req.ip) || req.headers['cf-connecting-ip']) {
+      throw new ForbiddenException('Only the voice service on the hub can call this');
+    }
     if (!process.env.HUB_KEY) throw new UnauthorizedException('Set HUB_KEY in api/.env (npm run setup adds it)');
     if (key !== process.env.HUB_KEY) throw new UnauthorizedException('Wrong x-hub-key');
   }

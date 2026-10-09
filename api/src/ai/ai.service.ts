@@ -21,7 +21,12 @@ const EMBEDDING_MODEL = process.env.AI_EMBEDDING_MODEL || 'embeddinggemma';
 const THINK = process.env.AI_THINK === 'true'; // step-by-step reasoning: smarter, but much slower on small machines
 const CONTEXT = Number(process.env.AI_CONTEXT || 8192); // tokens the model can see at once (more = more memory)
 const KEEP_ALIVE = process.env.AI_KEEP_ALIVE || '30m'; // keep the model loaded so answers start fast
+// Model layers on the GPU (Ollama num_gpu). Unset = Ollama decides, which is cautious on small GPUs: on the hub laptop
+// (RTX 3050, 4 GB) it kept half of qwen3.5:4b on the CPU (14 tokens/s, 6 s per voice turn); 99 = all layers (36
+// tokens/s, 2 s). When set, embeddings run on the CPU so they never push the chat model off the GPU.
+const GPU_LAYERS = process.env.AI_GPU_LAYERS ? Number(process.env.AI_GPU_LAYERS) : undefined;
 const FACTUAL = { temperature: 0.2 }; // text() and json(): stick to the facts (RAG, extraction). chat() keeps the model's default.
+const EMBED_OPTIONS = GPU_LAYERS === undefined ? undefined : { num_gpu: 0 };
 export const EMBEDDING_DIMENSIONS = 768; // keep in sync with vector(768) in schema.prisma
 
 // Every AI call goes through here. Only the API talks to Ollama; web/mobile call the API.
@@ -43,8 +48,8 @@ export class AiService implements OnApplicationBootstrap {
 
   private warmUp() {
     return this.ollama
-      .generate({ model: this.model, prompt: '', keep_alive: KEEP_ALIVE })
-      .then(() => this.ollama.embed({ model: EMBEDDING_MODEL, input: 'warm up', keep_alive: KEEP_ALIVE }))
+      .generate({ model: this.model, prompt: '', keep_alive: KEEP_ALIVE, options: this.base().options }) // same options: no reload later
+      .then(() => this.ollama.embed({ model: EMBEDDING_MODEL, input: 'warm up', keep_alive: KEEP_ALIVE, options: EMBED_OPTIONS }))
       .then(() => console.log(`[ai] ${this.model} and ${EMBEDDING_MODEL} are loaded`))
       .catch(() => {}); // Ollama offline or a model missing: the AI status badge explains it
   }
@@ -128,6 +133,7 @@ export class AiService implements OnApplicationBootstrap {
           model: EMBEDDING_MODEL,
           input: texts.slice(i, i + 32).map((t) => prefix + t),
           keep_alive: KEEP_ALIVE,
+          options: EMBED_OPTIONS,
         }),
       );
       vectors.push(...res.embeddings);
@@ -173,7 +179,7 @@ export class AiService implements OnApplicationBootstrap {
     return {
       model: this.model,
       keep_alive: KEEP_ALIVE,
-      options: { num_ctx: CONTEXT, ...options },
+      options: { num_ctx: CONTEXT, ...(GPU_LAYERS === undefined ? {} : { num_gpu: GPU_LAYERS }), ...options },
       ...(this.thinkSupported ? { think: THINK } : {}),
     };
   }

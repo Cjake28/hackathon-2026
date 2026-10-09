@@ -8,6 +8,13 @@ export const OLLAMA = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
 export const MODEL = process.env.AI_MODEL || 'qwen3.5:2b';
 export const EMBEDDING_MODEL = process.env.AI_EMBEDDING_MODEL || 'embeddinggemma';
 
+// The options the API sends with every chat (api/src/ai/ai.service.ts): same context size and GPU layers, so the
+// benchmark measures the speed the app really gets.
+export const CHAT_OPTIONS = {
+  num_ctx: Number(process.env.AI_CONTEXT || 8192),
+  ...(process.env.AI_GPU_LAYERS ? { num_gpu: Number(process.env.AI_GPU_LAYERS) } : {}),
+};
+
 // The Ollama program (Windows installs it in AppData; elsewhere it's on the PATH).
 const windowsExe = join(process.env.LOCALAPPDATA ?? '', 'Programs', 'Ollama', 'ollama.exe');
 export const ollamaExe = process.platform === 'win32' && existsSync(windowsExe) ? windowsExe : 'ollama';
