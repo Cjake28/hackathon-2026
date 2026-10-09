@@ -17,8 +17,6 @@ EL_RATE = 22050  # pcm_22050 works on every ElevenLabs plan
 KOKORO_VOICE = 'af_heart'
 
 _q: queue.Queue[str] = queue.Queue()
-_worker: threading.Thread | None = None
-_lock = threading.Lock()
 _kokoro = None  # loaded once, on the worker thread
 _engine = None  # pyttsx3, created on the worker thread (not thread-safe)
 
@@ -87,6 +85,10 @@ def _speak(text: str) -> None:
 
 
 def _run() -> None:
+    try:
+        _load_kokoro()  # warm up now (~3 s) so the first offline sentence isn't late
+    except Exception as e:
+        print(f'  (kokoro not available: {e})')
     while True:
         text = _q.get()
         state.speaking.set()
@@ -102,11 +104,8 @@ def _run() -> None:
 
 def say(text: str) -> None:
     """Queue text to be spoken. Returns immediately."""
-    global _worker
-    if not text or not text.strip():
-        return
-    with _lock:
-        if _worker is None:
-            _worker = threading.Thread(target=_run, daemon=True, name='tts')
-            _worker.start()
-    _q.put(text.strip())
+    if text and text.strip():
+        _q.put(text.strip())
+
+
+threading.Thread(target=_run, daemon=True, name='tts').start()
