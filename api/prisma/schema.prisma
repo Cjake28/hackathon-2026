@@ -71,6 +71,12 @@ model DocumentChunk {
   embedding  Unsupported("vector(768)") // keep in sync with EMBEDDING_DIMENSIONS in ai.service.ts
 }
 
+// App settings changed from the UI (e.g. "ai.model", picked on the web AI Settings page).
+model Setting {
+  key   String @id
+  value String
+}
+
 model Item {
   id        Int      @id @default(autoincrement())
   name      String

@@ -23,6 +23,8 @@
 - Dev: `npm run ai` (Ollama, 11434), `npm run dev` (api + web), `npm run dev:mobile` (Expo). Docker runs Postgres (4102).
 - Compare models on the hub: `npm run ai:bench -- <model> <model>` → ai-bench.md.
 - Hub / demo: `npm run hub` builds the web app and the API serves it → one URL for every device: http://<hub-ip>:4101
+- Data: `npm run backup` → backups/*.sql, `npm run restore -- <file> --yes`, `npm run demo:reset -- --yes`
+  (deletes chats, documents, items; re-seeds). Never run restore or demo:reset unless I ask.
 
 ## Adding a feature — copy the `items` example
 1. DB: add a model in `api/prisma/schema.prisma` (IDs: `Int @id @default(autoincrement())`)
@@ -59,6 +61,9 @@
 - Streaming to the UI: `ai.chat()` / `ai.textStream()` + `sendStream()` (`api/src/ai/send-stream.ts`) on the API,
   `streamText()` in `lib/api.ts` on the client (web: fetch, mobile: expo/fetch), see `hooks/useAi.ts`.
   Small local models are slow: stream anything longer than a sentence.
+  Let users stop a stream: pass an `AbortSignal` to `streamText()`; the hooks return `stop()` (see `useAsk`).
+  Stopping also stops the AI on the hub, so the next person doesn't wait.
+- Show AI text with `<Markdown>` (web, `components/Markdown.tsx`) or `<MarkdownText>` (mobile) — models answer in Markdown.
 - `<AiStatus />` shows whether Ollama is running and the models are downloaded (`GET /api/ai/status`, which also
   says whether the model can read pictures: `vision`, and use tools: `tools`).
 
@@ -76,7 +81,8 @@
   must be `confirm: true`: the AI only proposes it, the user taps Confirm, then `run()` executes (permission re-checked).
 - Users only get tools whose `permission` their role has. Keep tools few and descriptions short (small models).
 - When a confirmed tool changes other data, add its query key to `useResolveAction` in `hooks/useConversations.ts`.
-- Models are set in `api/.env` (`AI_MODEL`, `AI_EMBEDDING_MODEL`). Don't hardcode model names.
+- Models are set in `api/.env` (`AI_MODEL`, `AI_EMBEDDING_MODEL`). Don't hardcode model names. Admins switch the
+  chat model on the web AI Settings page (`ai.manage`, saved in the `Setting` table; `AI_MODEL` is only the default).
 - Small local models: keep prompts short and specific, ask for JSON with `ai.json` instead of parsing text,
   and give them the facts (RAG) instead of trusting what they "know". Zod is for AI schemas, not request validation.
 

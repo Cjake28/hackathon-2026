@@ -10,6 +10,7 @@ export const PERMISSIONS = [
   'roles.manage',
   'ai.use',
   'docs.manage',
+  'ai.manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

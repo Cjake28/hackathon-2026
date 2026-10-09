@@ -70,6 +70,7 @@ export async function streamWithHeader<T>(
   body: unknown,
   onHeader: (header: T) => void,
   onText: (text: string) => void,
+  signal?: AbortSignal,
 ) {
   let buffer = '';
   let headerDone = false;
@@ -81,18 +82,24 @@ export async function streamWithHeader<T>(
     headerDone = true;
     onHeader(JSON.parse(buffer.slice(0, newline)));
     if (buffer.length > newline + 1) onText(buffer.slice(newline + 1));
-  });
+  }, signal);
 }
 
 // POSTs and reads a streamed text reply (AI chat). React Native's fetch can't stream; expo/fetch can.
-export async function streamText(path: string, body: unknown, onText: (text: string) => void) {
+export async function streamText(
+  path: string,
+  body: unknown,
+  onText: (text: string) => void,
+  signal?: AbortSignal, // abort() = stop the answer (the hub stops generating too)
+) {
   const res = await streamingFetch(`${API_URL}${path}`, {
     method: 'POST',
     headers: await authHeaders(true),
     body: JSON.stringify(body),
     credentials: 'omit',
-  }).catch(() => {
-    throw unreachable();
+    signal,
+  }).catch((error) => {
+    throw signal?.aborted ? error : unreachable();
   });
   if (!res.ok || !res.body) {
     const data = await res.json().catch(() => null);

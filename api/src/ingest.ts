@@ -9,7 +9,7 @@ import { RagService } from './rag/rag.service';
 // `npm run rag:ingest` indexes every PDF/TXT/Markdown file in api/rag-data (a file with the same name is replaced).
 async function main() {
   const prisma = new PrismaService();
-  const rag = new RagService(prisma, new AiService());
+  const rag = new RagService(prisma, new AiService(prisma));
   const dir = resolve('rag-data');
   const files = readdirSync(dir).filter((f) => RAG.fileTypes.test(f));
   for (const file of files) {

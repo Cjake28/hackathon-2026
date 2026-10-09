@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileToBase64, streamWithHeader } from '@/lib/api';
 import type { AskResult, RagDocument, Source } from '@/types';
@@ -31,18 +31,25 @@ export const useDeleteDocument = () => {
 // the response's first line is JSON { sources }, the rest is the answer text.
 export function useAsk() {
   const [data, setData] = useState<AskResult | null>(null);
+  const controller = useRef<AbortController | null>(null);
 
   const ask = useMutation({
     mutationFn: async (question: string) => {
       setData(null);
-      await streamWithHeader<{ sources: Source[] }>(
-        '/rag/ask',
-        { question },
-        ({ sources }) => setData({ sources, answer: '' }),
-        (text) => setData((d) => d && { ...d, answer: d.answer + text }),
-      );
+      controller.current = new AbortController();
+      try {
+        await streamWithHeader<{ sources: Source[] }>(
+          '/rag/ask',
+          { question },
+          ({ sources }) => setData({ sources, answer: '' }),
+          (text) => setData((d) => d && { ...d, answer: d.answer + text }),
+          controller.current.signal,
+        );
+      } catch (error) {
+        if (!controller.current?.signal.aborted) throw error; // stopped by the user: not an error
+      }
     },
   });
 
-  return { mutate: ask.mutate, isPending: ask.isPending, data };
+  return { mutate: ask.mutate, isPending: ask.isPending, data, stop: () => controller.current?.abort() };
 }

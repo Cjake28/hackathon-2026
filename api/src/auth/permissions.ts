@@ -8,6 +8,7 @@ export const PERMISSIONS = [
   'roles.manage',
   'ai.use', // AI chat, AI features, asking the documents
   'docs.manage', // upload/delete RAG documents
+  'ai.manage', // pick the hub's AI model (web AI Settings page)
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

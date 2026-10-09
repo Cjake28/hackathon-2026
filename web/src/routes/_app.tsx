@@ -22,6 +22,7 @@ const nav = [
   { to: '/docs', label: 'Docs', permission: 'ai.use' },
   { to: '/users', label: 'Users', permission: 'users.manage' },
   { to: '/roles', label: 'Roles', permission: 'roles.manage' },
+  { to: '/ai-settings', label: 'AI Settings', permission: 'ai.manage' },
 ] as const;
 
 function AppLayout() {

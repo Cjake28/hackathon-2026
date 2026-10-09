@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, streamWithHeader } from '@/lib/api';
 import type {
@@ -50,10 +51,13 @@ export const useDeleteConversation = () => {
 };
 
 // Sends a message and streams the reply into the cached conversation (sources first, then the text).
+// stop() ends the answer early; what arrived so far is kept (and saved by the hub).
 export function useSendMessage() {
   const qc = useQueryClient();
-  return useMutation({
+  const controller = useRef<AbortController | null>(null);
+  const mutation = useMutation({
     mutationFn: async ({ id, content, image }: { id: number; content: string; image?: string }) => {
+      controller.current = new AbortController();
       const edit = (change: (messages: ConversationMessage[]) => ConversationMessage[]) =>
         qc.setQueryData<ConversationWithMessages>(['conversation', id], (c) => ({
           ...(c ?? { id, title: content, useDocs: false, useTools: false, updatedAt: '' }),
@@ -69,18 +73,24 @@ export function useSendMessage() {
       const reply = (change: (m: ConversationMessage) => ConversationMessage) =>
         edit((m) => m.map((x) => (x.id === -2 ? change(x) : x)));
 
-      await streamWithHeader<{ sources: Source[]; action?: PendingAction }>(
-        `/conversations/${id}/messages`,
-        { content, image },
-        ({ sources, action }) => reply((x) => ({ ...x, sources, action: action ?? null })),
-        (text) => reply((x) => ({ ...x, content: x.content + text })),
-      );
+      try {
+        await streamWithHeader<{ sources: Source[]; action?: PendingAction }>(
+          `/conversations/${id}/messages`,
+          { content, image },
+          ({ sources, action }) => reply((x) => ({ ...x, sources, action: action ?? null })),
+          (text) => reply((x) => ({ ...x, content: x.content + text })),
+          controller.current.signal,
+        );
+      } catch (error) {
+        if (!controller.current?.signal.aborted) throw error; // stopped by the user: not an error
+      }
     },
     onSettled: (_data, _error, { id }) => {
       qc.invalidateQueries({ queryKey: ['conversation', id] });
       qc.invalidateQueries({ queryKey: ['conversations'] });
     },
   });
+  return { ...mutation, stop: () => controller.current?.abort() };
 }
 
 // Confirm or cancel an action the AI proposed ("Allow app actions"). Data it changed is reloaded.

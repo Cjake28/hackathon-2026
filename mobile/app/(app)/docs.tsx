@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { AiStatus } from '@/components/AiStatus';
+import { MarkdownText } from '@/components/MarkdownText';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -36,14 +37,20 @@ export default function DocsScreen() {
           onChangeText={setQuestion}
           onSubmitEditing={submit}
         />
-        <Button testID="docs-ask" onPress={submit} disabled={ask.isPending || !question.trim()}>
-          <Text>{ask.isPending ? '…' : 'Ask'}</Text>
-        </Button>
+        {ask.isPending ? (
+          <Button testID="docs-stop" variant="outline" onPress={ask.stop}>
+            <Text>Stop</Text>
+          </Button>
+        ) : (
+          <Button testID="docs-ask" onPress={submit} disabled={!question.trim()}>
+            <Text>Ask</Text>
+          </Button>
+        )}
       </View>
 
       {ask.data && (
         <Card className="gap-3 p-4">
-          <Text>{ask.data.answer}</Text>
+          <MarkdownText>{ask.data.answer || '…'}</MarkdownText>
           {ask.data.sources.map((s) => (
             <View key={s.n} className="gap-1 rounded-md border border-border p-2">
               <Text className="text-xs font-medium">

@@ -1,5 +1,6 @@
 import {
   BadGatewayException,
+  BadRequestException,
   HttpException,
   Injectable,
   OnApplicationBootstrap,
@@ -7,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Ollama, type Message, type Tool } from 'ollama';
 import { z } from 'zod';
+import { PrismaService } from '../prisma.service';
 
 // `images`: base64 pictures for vision models (see status().vision).
 export type ChatMessage = { role: 'user' | 'assistant'; content: string; images?: string[] };
@@ -14,7 +16,7 @@ export type { Message as AiMessage, Tool as AiTool };
 
 // Local AI (Ollama on the hub). Settings in api/.env.
 const HOST = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
-const MODEL = process.env.AI_MODEL || 'qwen3.5:2b';
+const DEFAULT_MODEL = process.env.AI_MODEL || 'qwen3.5:2b'; // admins can switch on the web AI Settings page
 const EMBEDDING_MODEL = process.env.AI_EMBEDDING_MODEL || 'embeddinggemma';
 const THINK = process.env.AI_THINK === 'true'; // step-by-step reasoning: smarter, but much slower on small machines
 const CONTEXT = Number(process.env.AI_CONTEXT || 8192); // tokens the model can see at once (more = more memory)
@@ -26,15 +28,55 @@ export const EMBEDDING_DIMENSIONS = 768; // keep in sync with vector(768) in sch
 @Injectable()
 export class AiService implements OnApplicationBootstrap {
   private ollama = new Ollama({ host: HOST });
+  private model = DEFAULT_MODEL; // the chat model in use
   private thinkSupported = true; // turned off if the model rejects the `think` option
 
-  // Load both models in the background at startup, so the first question doesn't wait for it.
-  onApplicationBootstrap() {
-    void this.ollama
-      .generate({ model: MODEL, prompt: '', keep_alive: KEEP_ALIVE })
+  constructor(private prisma: PrismaService) {}
+
+  // Use the model an admin picked (if any), then load both models in the background so the first question
+  // doesn't wait for it.
+  async onApplicationBootstrap() {
+    const saved = await this.prisma.setting.findUnique({ where: { key: 'ai.model' } }).catch(() => null);
+    if (saved) this.model = saved.value;
+    void this.warmUp();
+  }
+
+  private warmUp() {
+    return this.ollama
+      .generate({ model: this.model, prompt: '', keep_alive: KEEP_ALIVE })
       .then(() => this.ollama.embed({ model: EMBEDDING_MODEL, input: 'warm up', keep_alive: KEEP_ALIVE }))
-      .then(() => console.log(`[ai] ${MODEL} and ${EMBEDDING_MODEL} are loaded`))
+      .then(() => console.log(`[ai] ${this.model} and ${EMBEDDING_MODEL} are loaded`))
       .catch(() => {}); // Ollama offline or a model missing: the AI status badge explains it
+  }
+
+  // Downloaded chat models (embedding-only models left out), for the AI Settings page.
+  async listModels() {
+    const { models } = await this.call(() => this.ollama.list());
+    const details = await Promise.all(
+      models.map(async (m) => {
+        const capabilities = (await this.ollama.show({ model: m.name }).catch(() => null))?.capabilities ?? [];
+        return {
+          name: m.name,
+          sizeGb: Math.round((m.size / 1e9) * 10) / 10,
+          capabilities,
+          active: m.name === this.model || m.name === `${this.model}:latest`,
+        };
+      }),
+    );
+    return details.filter((m) => m.capabilities.includes('completion'));
+  }
+
+  // Switch the chat model for everyone (saved, so it survives restarts). The old model is unloaded to free memory.
+  async setModel(name: string) {
+    const model = (await this.listModels()).find((m) => m.name === name);
+    if (!model) throw new BadRequestException(`${name} isn't downloaded on the hub. Run: ollama pull ${name}`);
+    const previous = this.model;
+    await this.prisma.setting.upsert({ where: { key: 'ai.model' }, update: { value: name }, create: { key: 'ai.model', value: name } });
+    this.model = name;
+    this.thinkSupported = true;
+    if (previous !== name) void this.ollama.generate({ model: previous, prompt: '', keep_alive: 0 }).catch(() => {});
+    void this.warmUp();
+    return this.status();
   }
 
   // Plain text answer.
@@ -70,6 +112,8 @@ export class AiService implements OnApplicationBootstrap {
       for await (const part of stream) if (part.message.content) yield part.message.content;
     } catch (error) {
       throw toHttpError(error);
+    } finally {
+      stream.abort(); // the user stopped or left: tell Ollama to stop generating (frees the hub's AI)
     }
   }
 
@@ -105,13 +149,13 @@ export class AiService implements OnApplicationBootstrap {
 
   // For the UI: is Ollama running, are both models downloaded, and can the chat model see images / use tools?
   async status() {
-    const base = { model: MODEL, embeddingModel: EMBEDDING_MODEL, vision: false, tools: false };
+    const base = { model: this.model, embeddingModel: EMBEDDING_MODEL, vision: false, tools: false };
     try {
       const { models } = await this.ollama.list();
       const names = models.map((m) => m.name);
       const has = (model: string) => names.includes(model) || names.includes(`${model}:latest`);
-      const missing = [MODEL, EMBEDDING_MODEL].filter((m) => !has(m));
-      const capabilities = has(MODEL) ? (await this.ollama.show({ model: MODEL })).capabilities ?? [] : [];
+      const missing = [this.model, EMBEDDING_MODEL].filter((m) => !has(m));
+      const capabilities = has(this.model) ? (await this.ollama.show({ model: this.model })).capabilities ?? [] : [];
       return {
         ...base,
         online: true,
@@ -126,7 +170,7 @@ export class AiService implements OnApplicationBootstrap {
 
   private base(options: Record<string, number> = {}) {
     return {
-      model: MODEL,
+      model: this.model,
       keep_alive: KEEP_ALIVE,
       options: { num_ctx: CONTEXT, ...options },
       ...(this.thinkSupported ? { think: THINK } : {}),

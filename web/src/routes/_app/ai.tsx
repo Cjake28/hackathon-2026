@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { ImagePlus, List, Plus, Send, Square, Trash2, Volume2, X } from 'lucide-react';
 import { AiStatus } from '@/components/AiStatus';
+import { Markdown } from '@/components/Markdown';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -232,9 +233,15 @@ function ChatPanel({ conversationId, onSelect }: { conversationId?: number; onSe
             }
           }}
         />
-        <Button type="submit" disabled={send.isPending || !input.trim()}>
-          <Send /> Send
-        </Button>
+        {send.isPending ? (
+          <Button type="button" variant="outline" onClick={send.stop}>
+            <Square /> Stop
+          </Button>
+        ) : (
+          <Button type="submit" disabled={!input.trim()}>
+            <Send /> Send
+          </Button>
+        )}
       </form>
     </div>
   );
@@ -255,11 +262,11 @@ function MessageBubble(props: {
       {m.image && <img src={`data:image/jpeg;base64,${m.image}`} alt="" className="max-h-48 rounded-md border" />}
       <div
         className={cn(
-          'whitespace-pre-wrap rounded-lg px-3 py-2 text-sm',
-          mine ? 'bg-primary text-primary-foreground' : 'bg-muted',
+          'rounded-lg px-3 py-2 text-sm',
+          mine ? 'whitespace-pre-wrap bg-primary text-primary-foreground' : 'bg-muted',
         )}
       >
-        {m.content || '…'}
+        {mine || !m.content ? m.content || '…' : <Markdown>{m.content}</Markdown>}
       </div>
       {!mine && !!m.sources?.length && (
         <div className="space-y-0.5 text-xs text-muted-foreground">

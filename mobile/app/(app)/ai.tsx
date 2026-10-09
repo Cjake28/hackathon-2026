@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { CameraIcon, ImageIcon, PlusIcon, SquareIcon, Volume2Icon, XIcon } from 'lucide-react-native';
 import { FlatList, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { AiStatus } from '@/components/AiStatus';
+import { MarkdownText } from '@/components/MarkdownText';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Icon } from '@/components/ui/icon';
@@ -136,9 +137,15 @@ export default function AiChatScreen() {
           onChangeText={setInput}
           onSubmitEditing={submit}
         />
-        <Button testID="chat-send" onPress={submit} disabled={send.isPending || !input.trim()}>
-          <Text>Send</Text>
-        </Button>
+        {send.isPending ? (
+          <Button testID="chat-stop" variant="outline" onPress={send.stop}>
+            <Text>Stop</Text>
+          </Button>
+        ) : (
+          <Button testID="chat-send" onPress={submit} disabled={!input.trim()}>
+            <Text>Send</Text>
+          </Button>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
@@ -160,7 +167,11 @@ function MessageBubble(props: {
         <Image source={{ uri: `data:image/jpeg;base64,${m.image}` }} className="h-40 w-40 rounded-md" resizeMode="cover" />
       )}
       <View className={cn('rounded-lg px-3 py-2', mine ? 'bg-primary' : 'bg-muted')}>
-        <Text className={mine ? 'text-primary-foreground' : undefined}>{m.content || '…'}</Text>
+        {mine || !m.content ? (
+          <Text className={mine ? 'text-primary-foreground' : undefined}>{m.content || '…'}</Text>
+        ) : (
+          <MarkdownText>{m.content}</MarkdownText>
+        )}
       </View>
       {!mine && !!m.sources?.length && (
         <Text className="text-xs text-muted-foreground">

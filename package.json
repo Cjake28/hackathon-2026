@@ -14,7 +14,10 @@
     "db:up": "docker compose up -d",
     "db:push": "npm run db:push --prefix api",
     "db:seed": "npm run db:seed --prefix api",
-    "db:studio": "npm run db:studio --prefix api"
+    "db:studio": "npm run db:studio --prefix api",
+    "demo:reset": "node scripts/demo-reset.mjs",
+    "backup": "node scripts/backup.mjs",
+    "restore": "node scripts/restore.mjs"
   },
   "devDependencies": {
     "concurrently": "10.0.5"

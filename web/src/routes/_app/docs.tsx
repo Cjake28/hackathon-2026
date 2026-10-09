@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { Trash2, Upload } from 'lucide-react';
 import { AiStatus } from '@/components/AiStatus';
+import { Markdown } from '@/components/Markdown';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -59,14 +60,20 @@ function AskPanel() {
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
           />
-          <Button type="submit" disabled={ask.isPending || !question.trim()}>
-            {ask.isPending ? 'Thinking…' : 'Ask'}
-          </Button>
+          {ask.isPending ? (
+            <Button type="button" variant="outline" onClick={ask.stop}>
+              Stop
+            </Button>
+          ) : (
+            <Button type="submit" disabled={!question.trim()}>
+              Ask
+            </Button>
+          )}
         </form>
 
         {ask.data && (
           <div className="space-y-3">
-            <p className="whitespace-pre-wrap text-sm">{ask.data.answer}</p>
+            <Markdown>{ask.data.answer || '…'}</Markdown>
             {ask.data.sources.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">Sources</p>

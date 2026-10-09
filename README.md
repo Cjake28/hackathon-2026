@@ -7,9 +7,10 @@ Wi-Fi or LAN open it in a browser. No cloud services, no internet needed once it
 - **web/**: React + Vite + TanStack Query/Router + shadcn/ui (works in phone browsers too)
 - **mobile/**: Expo + Expo Router + React Native Reusables + TanStack Query (optional)
 - **AI**: [Ollama](https://ollama.com) on the hub — structured JSON output, "Generate with AI" example
-- **AI Chat**: saved conversations per user, optionally answering from your documents (with sources), questions about
-  a picture (camera/gallery), read-aloud answers, and **app actions**: the AI can look things up and propose changes
-  (e.g. create to-do items) that run only after you tap Confirm
+- **AI Chat**: saved conversations per user, formatted answers (Markdown) you can stop mid-way, optionally answering
+  from your documents (with sources), questions about a picture (camera/gallery), read-aloud answers, and
+  **app actions**: the AI can look things up and propose changes (e.g. create to-do items) that run only after you tap Confirm
+- **AI Settings** (admins): switch the hub's chat model from the web app, no restart
 - **RAG**: ask questions about your own documents (PDF/TXT/MD), answers with sources
 - **Auth**: email + password, permission-based roles (admin, user, your own)
 
@@ -30,7 +31,8 @@ Wi-Fi or LAN open it in a browser. No cloud services, no internet needed once it
    npm run rag:ingest --prefix api   # indexes the sample handbook in api/rag-data
    ```
 
-Which chat model (`AI_MODEL` in `api/.env`):
+Which chat model (`AI_MODEL` in `api/.env` is the default; admins can switch between downloaded models on the web
+**AI Settings** page):
 
 | Hub hardware | Model | Download |
 |---|---|---|
@@ -62,6 +64,14 @@ Turn the internet off — it keeps working.
   so the first question doesn't wait.
 - Windows: if other devices can't connect, allow Node.js in Windows Firewall (Private networks).
 - The AI answers one question at a time; a GPU makes it much faster.
+
+Before and after the demo:
+
+```
+npm run backup                                   # saves the whole database to backups/
+npm run restore -- backups/<file>.sql --yes      # puts a backup back (the current data is backed up first)
+npm run demo:reset -- --yes                      # deletes all chats, documents and items; re-seeds the demo data
+```
 
 ## Develop
 

@@ -5,3 +5,4 @@ web/src/routeTree.gen.ts
 *.log
 ai-bench.md
 *.local.md
+backups/

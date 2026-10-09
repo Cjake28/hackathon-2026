@@ -10,6 +10,7 @@ export const PERMISSIONS = [
   'roles.manage',
   'ai.use',
   'docs.manage',
+  'ai.manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -47,6 +48,14 @@ export type AiStatus = {
   missing: string[];
   vision: boolean;
   tools: boolean;
+};
+
+// A chat model downloaded on the hub (AI Settings page).
+export type AiModel = {
+  name: string;
+  sizeGb: number;
+  capabilities: string[]; // "completion", "vision", "tools", "thinking"
+  active: boolean;
 };
 
 // RAG

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { AiStatus } from '@/types';
+import type { AiModel, AiStatus } from '@/types';
 
 // Is the hub's local AI running, are its models downloaded, can it see pictures? Rechecked every 15 seconds.
 export const useAiStatus = () =>
@@ -10,6 +10,21 @@ export const useAiStatus = () =>
     queryFn: () => api.get<AiStatus>('/ai/status'),
     refetchInterval: 15_000,
   });
+
+// AI Settings (ai.manage): the chat models downloaded on the hub, and switching between them.
+export const useAiModels = () =>
+  useQuery({ queryKey: ['ai-models'], queryFn: () => api.get<AiModel[]>('/ai/models') });
+
+export const useSetAiModel = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (model: string) => api.patch<AiStatus>('/ai/model', { model }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ai-models'] });
+      qc.invalidateQueries({ queryKey: ['ai-status'] });
+    },
+  });
+};
 
 // Reads text aloud with the device's own voices (they work offline). One message at a time.
 export function useSpeech() {

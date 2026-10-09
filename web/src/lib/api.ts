@@ -28,11 +28,17 @@ export const api = {
 };
 
 // POSTs and reads a streamed text reply (AI chat). onText receives each new piece as it arrives.
-export async function streamText(path: string, body: unknown, onText: (text: string) => void) {
+export async function streamText(
+  path: string,
+  body: unknown,
+  onText: (text: string) => void,
+  signal?: AbortSignal, // abort() = stop the answer (the hub stops generating too)
+) {
   const res = await fetch(`/api${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   });
   if (!res.ok || !res.body) {
     const data = await res.json().catch(() => null);
@@ -53,6 +59,7 @@ export async function streamWithHeader<T>(
   body: unknown,
   onHeader: (header: T) => void,
   onText: (text: string) => void,
+  signal?: AbortSignal,
 ) {
   let buffer = '';
   let headerDone = false;
@@ -64,7 +71,7 @@ export async function streamWithHeader<T>(
     headerDone = true;
     onHeader(JSON.parse(buffer.slice(0, newline)));
     if (buffer.length > newline + 1) onText(buffer.slice(newline + 1));
-  });
+  }, signal);
 }
 
 // Shrinks a photo to fit maxSize × maxSize and returns base64 JPEG (no "data:" prefix). Smaller = faster AI.
