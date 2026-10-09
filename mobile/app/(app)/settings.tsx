@@ -3,7 +3,9 @@ import {
   Bell,
   Brain,
   ChatCircleDots,
+  MapPin,
   Microphone,
+  NavigationArrow,
   ShieldCheck,
   SignOut,
   UsersThree,
@@ -12,6 +14,7 @@ import {
 } from 'phosphor-react-native';
 import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { FamilyAvatar } from '@/components/FamilyAvatar';
+import { HubAddress } from '@/components/HubAddress';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Card, CardList } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -20,7 +23,9 @@ import { Text } from '@/components/ui/text';
 import { useCan, useLogout, useMe } from '@/hooks/useAuth';
 import { useFloatingBubble } from '@/hooks/useFloatingBubble';
 import { useHubFamily } from '@/hooks/useHub';
+import { useShareLocation } from '@/hooks/useLocationShare';
 import { usePreferencesStore } from '@/hooks/usePreferences';
+import { NEEDS_REBUILD } from '@/lib/location';
 
 function PreferenceRow({
   icon,
@@ -94,6 +99,7 @@ export default function SettingsScreen() {
   const setPreference = usePreferencesStore((state) => state.setPreference);
 
   const { floating, float } = useFloatingBubble();
+  const share = useShareLocation();
 
   const confirmSwitch = () =>
     Alert.alert(
@@ -125,13 +131,13 @@ export default function SettingsScreen() {
 
         <View className="gap-1">
           <Text variant="label">Listening</Text>
-          <Text variant="muted">How Jarvis hears you</Text>
+          <Text variant="muted">How Onai hears you</Text>
           <Card className="p-4">
             <CardList>
               <PreferenceRow
                 icon={Microphone}
                 title="Wake word"
-                description="Listen for “Hey Jarvis” rather than waiting for a tap."
+                description="Listen for “Hey Onai” rather than waiting for a tap."
                 value={wakeWord}
                 onValueChange={(next) => setPreference('wakeWord', next)}
               />
@@ -153,13 +159,13 @@ export default function SettingsScreen() {
               <PreferenceRow
                 icon={Brain}
                 title="Remember preferences"
-                description="Let Jarvis carry what you like across conversations."
+                description="Let Onai carry what you like across conversations."
                 value={memory}
                 onValueChange={(next) => setPreference('memory', next)}
               />
               <LinkRow
                 icon={Brain}
-                title="What Jarvis remembers about you"
+                title="What Onai remembers about you"
                 description="Read every note, and delete any of them"
                 onPress={() => router.push('/memory')}
                 testID="settings-memory"
@@ -167,6 +173,44 @@ export default function SettingsScreen() {
             </CardList>
           </Card>
         </View>
+
+        {can('location.share') || can('location.read') ? (
+          <View className="gap-1">
+            <Text variant="label">Where you are</Text>
+            <Text variant="muted">Stays on this hub — nowhere else</Text>
+            <Card className="p-4">
+              <CardList>
+                {can('location.share') ? (
+                  <PreferenceRow
+                    icon={NavigationArrow}
+                    title="Share where I am"
+                    description={
+                      !share.state.supported
+                        ? NEEDS_REBUILD
+                        : (share.state.error ??
+                          (share.state.on
+                            ? share.state.place
+                              ? `Mom and Dad can see you're at ${share.state.place}.`
+                              : "Mom and Dad can see you're out. Only while the app is open."
+                            : 'Let Mom and Dad see where you are, only while the app is open.'))
+                    }
+                    value={share.state.on}
+                    onValueChange={share.setOn}
+                  />
+                ) : null}
+                {can('location.read') ? (
+                  <LinkRow
+                    icon={MapPin}
+                    title="Where everyone is"
+                    description="Who's at home, school or out, and name the places that count"
+                    onPress={() => router.push('/whereabouts')}
+                    testID="settings-whereabouts"
+                  />
+                ) : null}
+              </CardList>
+            </Card>
+          </View>
+        ) : null}
 
         {can('users.manage') || can('roles.manage') ? (
           <View className="gap-1">
@@ -197,6 +241,11 @@ export default function SettingsScreen() {
           </View>
         ) : null}
 
+        {/* Finding the hub: empty at home, the tunnel address when you're out. */}
+        <Card className="p-4">
+          <HubAddress />
+        </Card>
+
         <View className="gap-1">
           <Text variant="label">This phone</Text>
           <Card className="p-4">
@@ -217,7 +266,7 @@ export default function SettingsScreen() {
               />
               <PreferenceRow
                 icon={ChatCircleDots}
-                title="Keep Jarvis on screen"
+                title="Keep Onai on screen"
                 description="A circle you can drag anywhere, on your home screen and over other apps. Tap it to talk."
                 value={floating}
                 onValueChange={float}
@@ -251,7 +300,7 @@ export default function SettingsScreen() {
 
         <Card className="bg-sunken p-4">
           <Text variant="small" className="text-center text-muted-foreground">
-            Jarvis · Version 1.0.0
+            Onai · Version 1.0.0
           </Text>
         </Card>
       </ScrollView>

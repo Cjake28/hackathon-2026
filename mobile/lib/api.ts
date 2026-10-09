@@ -3,24 +3,59 @@ import { fetch as streamingFetch } from 'expo/fetch';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-// EXPO_PUBLIC_API_URL wins (e.g. a deployed API). Otherwise use the computer running `expo start`:
-// a phone or emulator can't reach "localhost", but it can reach the dev server's IP.
+// The hub's address. Default: EXPO_PUBLIC_API_URL, else the computer running `expo start` (a phone or emulator can't
+// reach "localhost", but it can reach the dev server's IP). The phone can change it in Settings → Hub address, e.g. to
+// the Cloudflare tunnel to reach the hub away from home (docs/mobile-hub.md section 12).
 const host = Constants.expoConfig?.hostUri?.split(':')[0] ?? 'localhost';
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${host}:4101/api`;
+export const DEFAULT_API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${host}:4101/api`;
 
-// The session token from login. SecureStore on phones, localStorage on Expo web.
-const TOKEN_KEY = 'token';
-export const token = {
-  get: async () =>
-    Platform.OS === 'web' ? localStorage.getItem(TOKEN_KEY) : SecureStore.getItemAsync(TOKEN_KEY),
+// A saved value: SecureStore on phones, localStorage on Expo web.
+const stored = (key: string) => ({
+  get: async () => (Platform.OS === 'web' ? localStorage.getItem(key) : SecureStore.getItemAsync(key)),
   set: async (value: string) =>
-    Platform.OS === 'web'
-      ? localStorage.setItem(TOKEN_KEY, value)
-      : SecureStore.setItemAsync(TOKEN_KEY, value),
-  clear: async () =>
-    Platform.OS === 'web'
-      ? localStorage.removeItem(TOKEN_KEY)
-      : SecureStore.deleteItemAsync(TOKEN_KEY),
+    Platform.OS === 'web' ? localStorage.setItem(key, value) : SecureStore.setItemAsync(key, value),
+  clear: async () => (Platform.OS === 'web' ? localStorage.removeItem(key) : SecureStore.deleteItemAsync(key)),
+});
+
+// The session token from login.
+export const token = stored('token');
+
+const savedHub = stored('hubUrl');
+let apiUrl = DEFAULT_API_URL;
+// Read the saved hub address once; every request waits for it.
+const loaded = savedHub
+  .get()
+  .then((url) => {
+    if (url) apiUrl = url;
+  })
+  .catch(() => {});
+
+// "https://abc.trycloudflare.com" → "https://abc.trycloudflare.com/api", "192.168.1.20:4101" → "http://192.168.1.20:4101/api"
+export function normalizeHubUrl(input: string) {
+  let url = input.trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(url)) url = `http://${url}`;
+  if (!/\/api$/i.test(url)) url = `${url}/api`;
+  return url;
+}
+
+export const hubAddress = {
+  get: async () => {
+    await loaded;
+    return apiUrl;
+  },
+  // Empty → back to the default (home Wi-Fi). The login stays: it's the same hub, reached another way.
+  set: async (input: string) => {
+    await loaded;
+    apiUrl = input.trim() ? normalizeHubUrl(input) : DEFAULT_API_URL;
+    if (apiUrl === DEFAULT_API_URL) await savedHub.clear();
+    else await savedHub.set(apiUrl);
+    return apiUrl;
+  },
+  // true when a hub answers at this address (GET /api/hub needs no login).
+  test: (input: string) =>
+    fetch(`${input.trim() ? normalizeHubUrl(input) : DEFAULT_API_URL}/hub`)
+      .then((res) => res.ok)
+      .catch(() => false),
 };
 
 export class ApiError extends Error {
@@ -40,11 +75,13 @@ async function authHeaders(json: boolean) {
   return headers;
 }
 
-const unreachable = () => new ApiError(`Can't reach the API at ${API_URL}. Is it running? Firewall?`, 0);
+const unreachable = () =>
+  new ApiError(`Can't reach the hub at ${apiUrl}. Same Wi-Fi? Away from home: set Settings → Hub address.`, 0);
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  await loaded;
   const headers = await authHeaders(body !== undefined);
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${apiUrl}${path}`, {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -92,7 +129,8 @@ export async function streamText(
   onText: (text: string) => void,
   signal?: AbortSignal, // abort() = stop the answer (the hub stops generating too)
 ) {
-  const res = await streamingFetch(`${API_URL}${path}`, {
+  await loaded;
+  const res = await streamingFetch(`${apiUrl}${path}`, {
     method: 'POST',
     headers: await authHeaders(true),
     body: JSON.stringify(body),

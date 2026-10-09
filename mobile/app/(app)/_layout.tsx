@@ -22,6 +22,7 @@ export default function AppLayout() {
         <Stack.Screen name="memory" />
         <Stack.Screen name="calendar" />
         <Stack.Screen name="budget" />
+        <Stack.Screen name="whereabouts" />
         <Stack.Screen name="heard" />
         <Stack.Screen name="accounts" />
         <Stack.Screen name="roles" />

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, AppState } from 'react-native';
 import { FloatingBubble } from '@/modules/floating-bubble';
 
-const LABEL = 'Jarvis';
+const LABEL = 'Onai';
 const OPEN_URL = 'hackathon://talk';
 
 // The bubble lives in a window Android owns, not in React, so the switch reads
@@ -36,15 +36,15 @@ export function useFloatingBubble() {
     if (!FloatingBubble.supported) {
       Alert.alert(
         'Not on this phone',
-        'Jarvis can only sit on top of your home screen on Android. iPhones give apps no way to do it.'
+        'Onai can only sit on top of your home screen on Android. iPhones give apps no way to do it.'
       );
       return;
     }
     if (!FloatingBubble.hasPermission()) {
       wanted.current = true;
       Alert.alert(
-        'Let Jarvis sit on top',
-        'Android asks for this one by hand. Find Jarvis in the list that opens, turn it on, then come back here.',
+        'Let Onai sit on top',
+        'Android asks for this one by hand. Find Onai in the list that opens, turn it on, then come back here.',
         [
           { text: 'Not now', style: 'cancel', onPress: () => { wanted.current = false; } },
           { text: 'Open settings', onPress: () => FloatingBubble.requestPermission() },

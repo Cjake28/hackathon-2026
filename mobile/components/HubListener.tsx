@@ -3,6 +3,8 @@ import { useEffect } from 'react';
 import { Alert, Modal, Pressable, Vibration, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { useDevicePoll, useDismissAlarm, useSnoozeAlarm } from '@/hooks/useHub';
+import { useLocationSharing } from '@/hooks/useLocationShare';
+import { startAlarmSound, stopAlarmSound } from '@/lib/alarm-sound';
 import { formatTime } from '@/lib/time';
 import type { HubNotice } from '@/types';
 
@@ -17,11 +19,19 @@ export function HubListener() {
   // The screen stays on, so a ringing alarm can't be missed on stage.
   useKeepAwake();
 
-  // Buzz until it's dismissed. (For a sound too, see "Alarm sound" in docs/mobile-hub.md.)
+  // Sends this phone's position to the hub while "Share where I am" is on (Settings).
+  useLocationSharing();
+
+  // Buzz and ring until it's dismissed. A silent phone would lose the alarm on stage, so the
+  // sound loops rather than playing once.
   useEffect(() => {
     if (!alarm) return;
     Vibration.vibrate([0, 800, 600], true);
-    return () => Vibration.cancel();
+    startAlarmSound();
+    return () => {
+      Vibration.cancel();
+      stopAlarmSound();
+    };
   }, [alarm?.id]);
 
   return (
@@ -64,4 +74,8 @@ function showNotice(notice: HubNotice) {
   if (notice.kind === 'task:new') Alert.alert('New task', notice.text); // "Mom: Wash the dishes"
   if (notice.kind === 'task:reviewed') Alert.alert('Task done ✓', notice.text); // parents: "Ana finished: Wash the dishes"
   if (notice.kind === 'intercom') Alert.alert('📢 Announcement', notice.text); // "Announcement from Mom: dinner's ready"
+  // Parents: a kid's alarm has rung for two minutes with nobody dismissing it.
+  if (notice.kind === 'alarm:ignored') Alert.alert('⏰ Alarm still ringing', notice.text);
+  // Fifteen minutes before anything in the calendar. The hub says it out loud too.
+  if (notice.kind === 'event:soon') Alert.alert('📅 Coming up', notice.text);
 }

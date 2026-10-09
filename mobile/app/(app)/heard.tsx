@@ -8,14 +8,14 @@ import { Text } from '@/components/ui/text';
 import { useHeard } from '@/hooks/useHub';
 import { relativeTime } from '@/lib/time';
 
-// The last things Jarvis heard out loud, newest first. Filled by the device poll
+// The last things Onai heard out loud, newest first. Filled by the device poll
 // (voice:heard notices) while the app is open — nothing is stored on the phone.
 export default function HeardScreen() {
   const { data: heard = [] } = useHeard();
 
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title="What Jarvis heard" subtitle="Said out loud in the house" back />
+      <ScreenHeader title="What Onai heard" subtitle="Said out loud in the house" back />
 
       <ScrollView className="flex-1" contentContainerClassName="gap-4 px-4 pb-10">
         <Card className="flex-row items-start gap-3 bg-accent-teal-soft p-4">
@@ -32,7 +32,7 @@ export default function HeardScreen() {
           <EmptyState
             icon={Ear}
             title="Nothing yet"
-            subtitle={'Say "Hey Jarvis" near the hub and it\'ll show up here.'}
+            subtitle={'Say "Hey Onai" near the hub and it\'ll show up here.'}
           />
         ) : (
           heard.map((notice) => (
@@ -46,7 +46,7 @@ export default function HeardScreen() {
                 {notice.data?.reply ? (
                   <View className="gap-0.5 border-t border-border pt-2">
                     <Text variant="small" className="text-muted-foreground">
-                      Jarvis
+                      Onai
                     </Text>
                     <Text>{notice.data.reply}</Text>
                   </View>

@@ -2,6 +2,7 @@ import { Redirect } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { HubAddress } from '@/components/HubAddress';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,6 +18,7 @@ export default function LoginScreen() {
   const login = useLogin();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [findingHub, setFindingHub] = useState(false);
 
   if (me) return <Redirect href="/(app)/(tabs)" />;
 
@@ -77,6 +79,11 @@ export default function LoginScreen() {
           <Text variant="muted" className="text-center">
             Everything you do stays on the hub at home.
           </Text>
+          {/* A phone away from home has to find the hub before it can log in. */}
+          <Button variant="ghost" testID="login-hub-address" onPress={() => setFindingHub((on) => !on)}>
+            <Text>{findingHub ? 'Hide hub address' : 'Not on the home Wi-Fi?'}</Text>
+          </Button>
+          {findingHub ? <HubAddress /> : null}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

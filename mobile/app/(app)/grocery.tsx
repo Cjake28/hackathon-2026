@@ -59,7 +59,7 @@ export default function GroceryScreen() {
           <EmptyState
             icon={Basket}
             title="The list is empty"
-            subtitle={'Say "Hey Jarvis, add rice to the grocery list" and it\'ll show up here.'}
+            subtitle={'Say "Hey Onai, add rice to the grocery list" and it\'ll show up here.'}
           />
         ) : null}
 

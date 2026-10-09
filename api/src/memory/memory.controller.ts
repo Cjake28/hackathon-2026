@@ -3,7 +3,7 @@ import { Can, CurrentUser } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.guard';
 import { PrismaService } from '../prisma.service';
 
-// Owner: Brain dev. #9 "What Jarvis remembers about me": only your own notes. They also go into the Jarvis prompt.
+// Owner: Brain dev. #9 "What Onai remembers about me": only your own notes. They also go into the Onai prompt.
 @Controller('memory')
 @Can('memory.own')
 export class MemoryController {

@@ -14,13 +14,13 @@ import type { RoleRow } from '@/types';
 
 // What each permission lets someone do (names come from GET /roles/permissions).
 const LABELS: Record<string, string> = {
-  'ai.use': 'Talk to Jarvis',
+  'ai.use': 'Talk to Onai',
   'alarms.own': 'Own alarms and reminders',
   'alarms.family': "Set other people's alarms",
   'tasks.own': 'Own tasks and chores',
   'tasks.assign': 'Give tasks to others',
   'presence.read': "See who's home",
-  'memory.own': 'Jarvis remembers things about me',
+  'memory.own': 'Onai remembers things about me',
   'intercom.send': 'Announce to everyone',
   'items.read': 'See the grocery list',
   'items.create': 'Add to the grocery list',

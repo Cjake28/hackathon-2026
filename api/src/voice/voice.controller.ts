@@ -35,7 +35,7 @@ type Answer = { text: string; action?: PendingAction };
 const GUEST_EMAIL = 'guest@family.local'; // every unknown voice speaks as this user (seed.ts)
 const BRAIN_OFFLINE = 'Sorry, my brain is restarting. Alarms and reminders still work.';
 // Normal turns take 1–3 s. When Ollama restarts (its tray app does that by itself) the model reloads and a turn can
-// wait ~45 s: tested on the hub laptop. Past this limit Jarvis answers instead of staying silent.
+// wait ~45 s: tested on the hub laptop. Past this limit Onai answers instead of staying silent.
 const AI_TIMEOUT_MS = 15_000;
 const BRAIN_SLOW = "Sorry, I'm still waking up. Ask me again in a few seconds.";
 // AI turns that passed AI_TIMEOUT_MS and are still running. The AI answers one at a time, so while one is stuck (the
@@ -47,7 +47,7 @@ const NO = /^(no|nope|hindi|huwag|wag|cancel|stop|never mind|ayaw)\b/i;
 // "Cancel that" right after "Done!": undo what the action created, within UNDO_SECONDS.
 // The whole sentence only: "cancel that alarm" is a different request.
 const UNDO =
-  /^(hey )?(jarvis )?(cancel that|undo( that)?|never ?mind|take (that|it) back|bawiin( mo)?|huwag na|wag na|i changed my mind)( please| po| na lang)?$/i;
+  /^(hey )?(jarvis |onai )?(cancel that|undo( that)?|never ?mind|take (that|it) back|bawiin( mo)?|huwag na|wag na|i changed my mind)( please| po| na lang)?$/i;
 const UNDO_SECONDS = 180;
 // The actions that can be undone, and how (tools whose run() returns the created row or rows).
 const UNDOERS: Record<string, (prisma: PrismaService, ids: number[]) => Promise<unknown>> = {
@@ -69,12 +69,12 @@ const FAMILY_TOPIC =
   /\bhome\b|bahay|alarm|task|chore|grocer|calendar|schedule|budget|spend|money|family|pamilya|\bmom\b|\bdad\b|nanay|tatay|\bkids?\b|anak|everyone|announce|lahat|points/i;
 const LOCALHOST = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
 const RECENT_MINUTES = 5; // earlier voice messages the AI sees, for follow-ups
-// "Good morning, Jarvis" always gives the briefing (#30): too important for the demo to leave to the model.
+// "Good morning, Onai" always gives the briefing (#30): too important for the demo to leave to the model.
 const BRIEFING = /^(good morning|morning|magandang umaga)\b|what('s| is) (my|the) (day|schedule)|ano.*(gagawin|schedule) ko/i;
 // "Where is Ana?" / "Nasaan na si Ana?" always reads the real location (#51): the small model repeats old answers.
-const WHERE = /^(?:hey jarvis,?\s*)?(?:where is|where's|nasaan(?: na)?(?: si)?)\s+([\p{L}' ]+?)\s*(?:now|ngayon)?\??$/iu;
+const WHERE = /^(?:hey (?:jarvis|onai),?\s*)?(?:where is|where's|nasaan(?: na)?(?: si)?)\s+([\p{L}' ]+?)\s*(?:now|ngayon)?\??$/iu;
 
-// Owner: Brain dev. Jarvis: the voice service (or the web's typed box) sends what someone said, the AI answers with
+// Owner: Brain dev. Onai: the voice service (or the web's typed box) sends what someone said, the AI answers with
 // the family tools (api/src/ai/tools.ts) and the reply is spoken. Permissions come from the speaker's role, never
 // from the prompt. Each person's exchanges are saved in their "Voice" chat, so the web chat page shows them too.
 @Controller('voice')
@@ -98,7 +98,7 @@ export class VoiceController {
     return this.handle(toAuthUser(user), body.text, body.confidence ?? 1);
   }
 
-  // Typed Jarvis from the web ("Type to Jarvis" box, the on-stage fallback). Speaker = the logged-in user.
+  // Typed Onai from the web ("Type to Onai" box, the on-stage fallback). Speaker = the logged-in user.
   @Can('ai.use')
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 20, ttl: 60_000 } }) // the hub's AI is shared: 20 turns/minute per device
@@ -166,7 +166,7 @@ export class VoiceController {
     return { reply: answer.text, speaker: { id: user.id, name: user.name, role: user.role }, pending: !!answer.action };
   }
 
-  // "Yes" / "oo" / "sige" runs the action Jarvis just proposed; "no" / "hindi" cancels it. Anything else (or after
+  // "Yes" / "oo" / "sige" runs the action Onai just proposed; "no" / "hindi" cancels it. Anything else (or after
   // CONFIRM_SECONDS) drops the proposal and is handled as a new request. Returns null when there's nothing to confirm.
   private async confirmByVoice(user: AuthUser, conversationId: number, text: string): Promise<Answer | null> {
     const last = await this.prisma.conversationMessage.findFirst({
@@ -238,7 +238,7 @@ export class VoiceController {
     const tools = guest ? [] : toolsFor(user).filter((t) => t.name !== 'search_documents');
     const deps = { prisma: this.prisma, rag: this.rag, user };
 
-    // Earlier messages only when Jarvis just asked something ("Which alarm?"), and only that one exchange: the small
+    // Earlier messages only when Onai just asked something ("Which alarm?"), and only that one exchange: the small
     // model copies old answers ("Ana is at school", even "Done! Remember: …" without saving anything) instead of
     // calling the tool again.
     const recent = await this.prisma.conversationMessage.findMany({
@@ -323,7 +323,7 @@ export class VoiceController {
 
     if (user.role === 'guest') {
       return [
-        "You are Jarvis, the voice assistant of a family's home hub. You don't recognize this speaker's voice, so they are a guest.",
+        "You are Onai, the voice assistant of a family's home hub. You don't recognize this speaker's voice, so they are a guest.",
         'Never share or change family information (people, alarms, tasks, schedules, who is home, shopping, money).',
         "If they ask for it, say you don't recognize their voice so you can't help with that.",
         'You can answer general questions: just answer them, without mentioning family information or their voice.',
@@ -337,7 +337,7 @@ export class VoiceController {
       this.prisma.memoryNote.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 15 }),
     ]);
     return [
-      "You are Jarvis, the friendly voice assistant of this family's home hub.",
+      "You are Onai, the friendly voice assistant of this family's home hub.",
       `You are talking to ${user.name} (${user.role}). Family: ${family.map((u) => `${u.name} (${u.role.name})`).join(', ')}.`,
       time,
       memory.length ? `What you remember about ${user.name}: ${memory.map((m) => m.text).join('; ')}.` : '',
@@ -376,7 +376,7 @@ async function withTimeout<T>(work: Promise<T>, ms: number, fallback: T): Promis
         let counted = true;
         const release = () => counted && ((counted = false), stuckTurns--);
         void work.catch(() => {}).finally(release);
-        setTimeout(release, 90_000); // a hung AI call must not keep Jarvis "waking up" forever
+        setTimeout(release, 90_000); // a hung AI call must not keep Onai "waking up" forever
         resolve(fallback);
       }, ms)),
   );

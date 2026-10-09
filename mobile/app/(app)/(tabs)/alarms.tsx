@@ -85,7 +85,7 @@ export default function AlarmsScreen() {
           <EmptyState
             icon={Alarm}
             title="No alarms yet"
-            subtitle={'Say "Hey Jarvis, wake Ana at 6:15 tomorrow" and it\'ll appear here.'}
+            subtitle={'Say "Hey Onai, wake Ana at 6:15 tomorrow" and it\'ll appear here.'}
           />
         ) : (
           groups.map((group) => (

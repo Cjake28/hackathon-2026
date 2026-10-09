@@ -63,7 +63,7 @@ export class UsersController {
   async remove(@CurrentUser() me: AuthUser, @Param('id', ParseIntPipe) id: number) {
     if (id === me.id) throw new BadRequestException("You can't delete yourself");
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id } });
-    if (user.email === GUEST_EMAIL) throw new BadRequestException('Keep Guest: Jarvis uses it for voices it doesn\'t know');
+    if (user.email === GUEST_EMAIL) throw new BadRequestException('Keep Guest: Onai uses it for voices it doesn\'t know');
     return toAuthUser(await this.prisma.user.delete({ where: { id }, include: { role: true } }));
   }
 }

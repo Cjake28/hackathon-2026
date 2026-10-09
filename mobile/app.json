@@ -44,8 +44,15 @@
           "cameraPermission": "Take a picture to ask the AI about it."
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Let your family see where you are while the app is open. Your location only goes to your home hub."
+        }
+      ],
       "expo-status-bar",
-      "expo-font"
+      "expo-font",
+      "expo-audio"
     ]
   }
 }

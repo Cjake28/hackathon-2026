@@ -100,6 +100,7 @@ android {
         // Windows MAX_PATH: ninja refuses object paths over 260 chars. The codegen
         // object names embed the full source path, which blows past that, so let
         // CMake hash long object file names instead.
+        // (Re-add this after any `npx expo prebuild` — it regenerates this file.)
         externalNativeBuild {
             cmake {
                 arguments "-DCMAKE_OBJECT_PATH_MAX=240"

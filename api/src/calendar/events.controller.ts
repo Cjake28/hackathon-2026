@@ -7,7 +7,7 @@ import { removeFromGoogle } from './google-calendar';
 
 type EventInput = { title: string; startsAt: string; userId?: number | null };
 
-// Owner: Hub dev. #58 calendar. Jarvis adds, moves and cancels events by voice (tools.ts); the scheduler gives a
+// Owner: Hub dev. #58 calendar. Onai adds, moves and cancels events by voice (tools.ts); the scheduler gives a
 // heads-up 15 min before each one (scheduler.service.ts).
 @Controller('events')
 @Can('calendar.use')
@@ -32,7 +32,7 @@ export class EventsController {
     });
   }
 
-  // Move, rename or change whose it is. Whoever added it, or a parent (same rule as Jarvis's move_event).
+  // Move, rename or change whose it is. Whoever added it, or a parent (same rule as Onai's move_event).
   @Patch(':id')
   async update(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number, @Body() body: Partial<EventInput>) {
     await eventICanChange(this.prisma, user, id);
@@ -45,7 +45,7 @@ export class EventsController {
     });
   }
 
-  // Whoever added it, or a parent (same rule as Jarvis's cancel_event). Its Google Calendar copy goes too.
+  // Whoever added it, or a parent (same rule as Onai's cancel_event). Its Google Calendar copy goes too.
   @Delete(':id')
   async remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     const event = await eventICanChange(this.prisma, user, id);

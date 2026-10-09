@@ -1,7 +1,8 @@
 import { useLocalSearchParams } from 'expo-router';
+import * as Speech from 'expo-speech';
 import { Microphone, PaperPlaneTilt, Trash } from 'phosphor-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View, type TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FamilyAvatar } from '@/components/FamilyAvatar';
 import { MarkdownText } from '@/components/MarkdownText';
@@ -15,7 +16,7 @@ import { useMe } from '@/hooks/useAuth';
 import { useTalk } from '@/hooks/useHub';
 import { cn } from '@/lib/utils';
 
-const WAKE_WORD = 'Hey Jarvis';
+const WAKE_WORD = 'Hey Onai';
 
 const SUGGESTIONS: Record<string, string[]> = {
   parent: [
@@ -23,20 +24,32 @@ const SUGGESTIONS: Record<string, string[]> = {
     'Wake Ana up in one minute',
     'Add rice to the grocery list',
     "Who's home?",
+    "What's on the calendar this week?",
+    'Add piano for Ana on Saturday at 4',
+    'Move the parents meeting to 6 PM',
   ],
-  child: ['Set an alarm for 7 oʼclock', "What's on my list today?", 'Add pandesal to the grocery list'],
+  child: [
+    'Set an alarm for 7 oʼclock',
+    "What's on my list today?",
+    'Add pandesal to the grocery list',
+    "What's on the calendar this week?",
+  ],
   guest: ['What time is it?'],
 };
 
-type Line = { id: number; from: 'me' | 'jarvis'; text: string };
+type Line = { id: number; from: 'me' | 'onai'; text: string };
 
-// Talking to Jarvis on the hub. Typed here, spoken at the hub's mic — same brain
-// either way. When Jarvis asks to confirm something, the Yes and No buttons
+// Talking to Onai on the hub. Typed here, spoken at the hub's mic — same brain
+// either way. When Onai asks to confirm something, the Yes and No buttons
 // answer it; nothing changes in the house until then.
 export default function TalkScreen() {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
   const nextId = useRef(0);
+
+  // Leaving the screen stops Onai mid-sentence.
+  useEffect(() => () => void Speech.stop(), []);
 
   const { data: me } = useMe();
   const talk = useTalk();
@@ -55,8 +68,11 @@ export default function TalkScreen() {
     talk.mutate(trimmed, {
       onSuccess: (reply) => {
         nextId.current += 1;
-        setLines((old) => [...old, { id: nextId.current, from: 'jarvis', text: reply.reply }]);
+        setLines((old) => [...old, { id: nextId.current, from: 'onai', text: reply.reply }]);
         setPending(reply.pending);
+        // Onai answers out loud, in the phone's own voice (works offline).
+        Speech.stop();
+        Speech.speak(reply.reply.replace(/[*#_`>]/g, ''));
       },
     });
   };
@@ -75,7 +91,7 @@ export default function TalkScreen() {
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader
-        title="Jarvis"
+        title="Onai"
         subtitle={me ? `Talking as ${me.name}` : undefined}
         back
         right={
@@ -99,14 +115,19 @@ export default function TalkScreen() {
         >
           {lines.length === 0 ? (
             <View className="items-center gap-4 pt-10">
-              <View className="h-24 w-24 items-center justify-center rounded-full bg-primary">
+              {/* Opens the keyboard — its own 🎤 key turns speech into the text below. */}
+              <Pressable
+                testID="talk-mic"
+                onPress={() => inputRef.current?.focus()}
+                className="h-24 w-24 items-center justify-center rounded-full bg-primary"
+              >
                 <Icon as={Microphone} weight="fill" size={32} className="text-primary-foreground" />
-              </View>
+              </Pressable>
               <Text variant="h3" className="text-center">
                 Say "{WAKE_WORD}"
               </Text>
               <Text variant="muted" className="max-w-xs text-center">
-                Or type it here. Jarvis only does what your account is allowed to do.
+                Or type it here. Onai only does what your account is allowed to do.
               </Text>
 
               <View className="flex-row flex-wrap justify-center gap-2">
@@ -119,17 +140,17 @@ export default function TalkScreen() {
             </View>
           ) : (
             lines.map((line) => {
-              const isJarvis = line.from === 'jarvis';
+              const isOnai = line.from === 'onai';
               return (
                 <View
                   key={line.id}
-                  className={cn('max-w-[85%] gap-1', isJarvis ? 'self-start' : 'items-end self-end')}
+                  className={cn('max-w-[85%] gap-1', isOnai ? 'self-start' : 'items-end self-end')}
                 >
                   <Text variant="muted" className="text-xs">
-                    {isJarvis ? 'Jarvis' : (me?.name ?? 'You')}
+                    {isOnai ? 'Onai' : (me?.name ?? 'You')}
                   </Text>
-                  <Card className={cn('px-3 py-2', isJarvis ? 'bg-sunken' : 'bg-primary-soft')}>
-                    {isJarvis ? <MarkdownText>{line.text}</MarkdownText> : <Text>{line.text}</Text>}
+                  <Card className={cn('px-3 py-2', isOnai ? 'bg-sunken' : 'bg-primary-soft')}>
+                    {isOnai ? <MarkdownText>{line.text}</MarkdownText> : <Text>{line.text}</Text>}
                   </Card>
                 </View>
               );
@@ -139,7 +160,7 @@ export default function TalkScreen() {
           {talk.isPending ? (
             <View className="max-w-[85%] gap-1 self-start">
               <Text variant="muted" className="text-xs">
-                Jarvis
+                Onai
               </Text>
               <Card className="bg-sunken px-3 py-2">
                 <Text variant="muted">Thinking…</Text>
@@ -148,7 +169,7 @@ export default function TalkScreen() {
           ) : null}
         </ScrollView>
 
-        {/* Jarvis asked to confirm before changing anything. */}
+        {/* Onai asked to confirm before changing anything. */}
         {pending && !talk.isPending ? (
           <View className="flex-row gap-2 border-t border-border px-3 pt-3">
             <Button testID="talk-yes" className="flex-1" onPress={() => send('yes')}>
@@ -165,6 +186,7 @@ export default function TalkScreen() {
           style={{ paddingBottom: Math.max(insets.bottom, 12) }}
         >
           <Input
+            ref={inputRef}
             testID="talk-input"
             className="flex-1"
             value={text}

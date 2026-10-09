@@ -1,7 +1,17 @@
 import { router } from 'expo-router';
 import { MotiView } from 'moti';
-import { CaretRight, GearSix, Microphone, Sun, WifiSlash } from 'phosphor-react-native';
-import { Pressable, ScrollView, View } from 'react-native';
+import * as Speech from 'expo-speech';
+import {
+  ArrowCounterClockwise,
+  CaretRight,
+  GearSix,
+  Microphone,
+  SpeakerHigh,
+  Sun,
+  X,
+} from 'phosphor-react-native';
+import { useEffect, useState } from 'react';
+import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FamilyAvatar } from '@/components/FamilyAvatar';
 import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar';
@@ -38,6 +48,7 @@ export default function HomeScreen() {
   const { data: tasks = [] } = useHubTasks(can('tasks.assign'));
   const { data: alarms = [] } = useHubAlarms(can('alarms.family') ? { all: true } : {});
   const briefing = useBriefing();
+  const [briefingOpen, setBriefingOpen] = useState(false);
 
   const home = people.filter((person) => person.isHome);
   const outstanding = tasks.filter((task) => task.status !== 'done').slice(0, 3);
@@ -82,7 +93,7 @@ export default function HomeScreen() {
               </Pressable>
             </MotiView>
             <View className="items-center gap-1">
-              <Text className="text-xl font-sans-bold text-white">Tap to talk to Jarvis</Text>
+              <Text className="text-xl font-sans-bold text-white">Tap to talk to Onai</Text>
               <Text variant="small" className="text-white/80">
                 Ask for anything, out loud
               </Text>
@@ -99,22 +110,18 @@ export default function HomeScreen() {
         </View>
 
         {can('ai.use') ? (
-          <View className="gap-2">
-            <Button
-              testID="home-briefing"
-              variant="secondary"
-              disabled={briefing.isPending}
-              onPress={() => briefing.mutate()}
-            >
-              <Icon as={Sun} weight="fill" size={20} />
-              <Text>{briefing.isPending ? 'Jarvis is thinking…' : 'Good morning — what’s my day?'}</Text>
-            </Button>
-            {briefing.data ? (
-              <Card className="p-4">
-                <MarkdownText>{briefing.data.text}</MarkdownText>
-              </Card>
-            ) : null}
-          </View>
+          <Button
+            testID="home-briefing"
+            variant="secondary"
+            disabled={briefing.isPending}
+            onPress={() => {
+              setBriefingOpen(true);
+              briefing.mutate();
+            }}
+          >
+            <Icon as={Sun} weight="fill" size={20} />
+            <Text>Good morning — what’s my day?</Text>
+          </Button>
         ) : null}
 
         <View className="gap-2">
@@ -234,29 +241,134 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        <MotiView
-          from={{ opacity: 0, translateY: 12 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 400, delay: 150 }}
+      </ScrollView>
+
+      <BriefingSheet
+        open={briefingOpen}
+        thinking={briefing.isPending}
+        text={briefing.data?.text}
+        onClose={() => {
+          setBriefingOpen(false);
+          briefing.reset();
+        }}
+      />
+    </View>
+  );
+}
+
+// Onai's run-through of the day. It arrives spoken — the phone reads it out the
+// moment it's ready, so you can be making breakfast — and the words stay on screen
+// underneath for anyone who'd rather read them.
+function BriefingSheet({
+  open,
+  thinking,
+  text,
+  onClose,
+}: {
+  open: boolean;
+  thinking: boolean;
+  text?: string;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const [speaking, setSpeaking] = useState(false);
+
+  const say = (what: string) => {
+    Speech.stop();
+    setSpeaking(true);
+    // Strip the Markdown marks: the voice shouldn't read out asterisks.
+    Speech.speak(what.replace(/[*#_`>]/g, ''), {
+      onDone: () => setSpeaking(false),
+      onStopped: () => setSpeaking(false),
+      onError: () => setSpeaking(false),
+    });
+  };
+
+  // Read it out as soon as it lands, and stop the moment the sheet closes.
+  useEffect(() => {
+    if (open && text) say(text);
+  }, [open, text]);
+
+  useEffect(() => {
+    if (!open) {
+      Speech.stop();
+      setSpeaking(false);
+    }
+  }, [open]);
+
+  useEffect(() => () => void Speech.stop(), []);
+
+  return (
+    <Modal visible={open} animationType="slide" transparent onRequestClose={onClose}>
+      <Pressable className="flex-1 justify-end bg-black/50" onPress={onClose}>
+        {/* Swallow taps inside the sheet so only the backdrop closes it. */}
+        <Pressable
+          className="max-h-[80%] rounded-t-3xl bg-background px-5 pt-5"
+          style={{ paddingBottom: insets.bottom + 20 }}
+          onPress={() => {}}
         >
-          <Card className="flex-row items-center gap-3 bg-accent-teal-soft p-4">
-            <MotiView
-              from={{ scale: 0.92 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'timing', duration: 1100, loop: true, repeatReverse: true }}
-              className="h-10 w-10 items-center justify-center rounded-full bg-card"
-            >
-              <Icon as={WifiSlash} weight="fill" className="text-accent-teal-onSoft" size={20} />
-            </MotiView>
-            <View className="flex-1 gap-0.5">
-              <Text className="font-medium text-accent-teal-onSoft">Works with the internet off</Text>
-              <Text variant="small" className="text-accent-teal-onSoft">
-                Nothing you say on this screen ever leaves the house.
+          <View className="mb-4 flex-row items-center gap-3">
+            <View className="h-11 w-11 items-center justify-center rounded-full bg-primary-soft">
+              <Icon as={Sun} weight="fill" size={22} className="text-primary-soft-foreground" />
+            </View>
+            <View className="flex-1">
+              <Text className="font-medium">Your day</Text>
+              <Text variant="muted">
+                {thinking ? 'Onai is thinking…' : speaking ? 'Onai is talking…' : 'From Onai, on this hub'}
               </Text>
             </View>
-          </Card>
-        </MotiView>
-      </ScrollView>
-    </View>
+            <Button variant="ghost" size="icon" testID="briefing-close" onPress={onClose}>
+              <Icon as={X} size={22} />
+            </Button>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {thinking ? (
+              <View className="items-center gap-3 py-10">
+                <MotiView
+                  from={{ opacity: 0.35 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ type: 'timing', duration: 700, loop: true, repeatReverse: true }}
+                >
+                  <Icon as={Sun} weight="fill" size={34} className="text-primary" />
+                </MotiView>
+                <Text variant="muted">Looking at your alarms, tasks and what's planned…</Text>
+              </View>
+            ) : text ? (
+              <View className="gap-5">
+                {/* Voice is how the answer arrives; the pulse says it's mid-sentence. */}
+                <View className="items-center gap-3 py-4">
+                  <MotiView
+                    from={{ scale: speaking ? 0.9 : 1 }}
+                    animate={{ scale: speaking ? 1.08 : 1 }}
+                    transition={{ type: 'timing', duration: 650, loop: speaking, repeatReverse: true }}
+                  >
+                    <Pressable
+                      testID="briefing-speak"
+                      onPress={() => (speaking ? (Speech.stop(), setSpeaking(false)) : say(text))}
+                      className="h-20 w-20 items-center justify-center rounded-full bg-primary"
+                    >
+                      <Icon
+                        as={speaking ? SpeakerHigh : ArrowCounterClockwise}
+                        weight="fill"
+                        size={30}
+                        className="text-primary-foreground"
+                      />
+                    </Pressable>
+                  </MotiView>
+                  <Text variant="muted">{speaking ? 'Tap to stop' : 'Tap to hear it again'}</Text>
+                </View>
+
+                <MarkdownText>{text}</MarkdownText>
+              </View>
+            ) : (
+              <Text variant="muted" className="py-10 text-center">
+                Nothing came back. Try again in a moment.
+              </Text>
+            )}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }

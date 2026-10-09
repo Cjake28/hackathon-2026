@@ -288,7 +288,7 @@ function TaskDetailScreen({ id }: { id: number }) {
 
         {task.feedback ? (
           <View className="gap-2">
-            <Text variant="label">What Jarvis said</Text>
+            <Text variant="label">What Onai said</Text>
             <Card className="flex-row items-start gap-3 bg-accent-rose-soft p-4">
               <Icon as={Sparkle} weight="fill" size={20} className="text-accent-rose-onSoft" />
               <Text className="flex-1 text-accent-rose-onSoft">{task.feedback}</Text>

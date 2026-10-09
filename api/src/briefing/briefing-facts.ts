@@ -3,14 +3,14 @@ import { hasPermission } from '../auth/permissions';
 import { pointsFor } from '../chores/points';
 import type { PrismaService } from '../prisma.service';
 
-// Hub local time, the way Jarvis says it: "Saturday, October 10, 4:00 PM".
+// Hub local time, the way Onai says it: "Saturday, October 10, 4:00 PM".
 export const say = (d: Date) =>
   d.toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 export const sayTime = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
-// How the AI turns briefingFacts() into speech (GET /api/briefing and "good morning, Jarvis").
+// How the AI turns briefingFacts() into speech (GET /api/briefing and "good morning, Onai").
 export const BRIEFING_SYSTEM =
-  'You are Jarvis, a warm family home assistant. Turn the facts into a spoken good-morning briefing: 2 to 4 short ' +
+  'You are Onai, a warm family home assistant. Turn the facts into a spoken good-morning briefing: 2 to 4 short ' +
   'sentences, plain text, no lists, no markdown. Use only the facts given. Skip anything that is "none".';
 
 // Everything the morning briefing (#30) can talk about, as plain facts for the AI. Used by GET /api/briefing and

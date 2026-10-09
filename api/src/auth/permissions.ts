@@ -17,7 +17,7 @@ export const PERMISSIONS = [
   'calendar.use',
   'budget.use',
   'presence.read', // who's home (never for guests)
-  'memory.own', // Jarvis remembers things about you
+  'memory.own', // Onai remembers things about you
   'location.share', // the phone sends its GPS (#51)
   'location.read', // see where everyone is, manage places (parents)
   'intercom.send', // "tell everyone dinner's ready" (#18): family, not guests
