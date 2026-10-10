@@ -27,8 +27,9 @@
 > `npm run db:seed` (new permissions + places). `/voice/*`, `/briefing` and `/chores` now call the real AI: run Ollama
 > (`npm run ai`, model `qwen3.5:4b`) or test them against the hub laptop. Everything else still answers without Ollama.
 
-> **The assistant is called ONAI** (not Jarvis, not Nova). Older text in this plan says "Jarvis": read it as ONAI.
-> Brain renames the AI's own words (prompts, replies, "Hey ONAI" / "ONAI, cancel that"; "Jarvis" still understood).
+> **The assistant is called Onai** (not Jarvis, not Nova). Older text in this plan says "Jarvis": read it as ONAI.
+> Done in the hub: the AI says "I'm Onai" and understands "Hey Onai" / "Onai, cancel that" ("Jarvis" still works).
+> Left: "Jarvis code" / "Added with Jarvis" in the Google Calendar files (Hub dev).
 > **Wake word catch:** the voice part's ready-made model only knows "Hey Jarvis". For "Hey ONAI": push-to-talk (works
 > now), or open-vocabulary keyword spotting (`sherpa-onnx`, no training, ~1 h, Voice dev), or a custom-trained model
 > (hours, not realistic today). UI: the app says "Hey Nova": change it to ONAI.
