@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { CalendarBlank, Microphone } from 'phosphor-react-native';
+import { CalendarBlank, GoogleLogo, Microphone } from 'phosphor-react-native';
 import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { EmptyState } from '@/components/EmptyState';
 import { FamilyAvatar } from '@/components/FamilyAvatar';
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardList } from '@/components/ui/card';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
-import { useDeleteEvent, useEvents, useHubFamily } from '@/hooks/useHub';
+import { useDeleteEvent, useEvents, useGoogleCalendar, useHubFamily } from '@/hooks/useHub';
 import type { HubEvent } from '@/types';
 
 const DAY = new Intl.DateTimeFormat('en-PH', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -32,6 +32,7 @@ export default function CalendarScreen() {
   const { data: events = [] } = useEvents();
   const { data: family = [] } = useHubFamily();
   const remove = useDeleteEvent();
+  const { data: google } = useGoogleCalendar();
   const days = byDay(events);
 
   const askDelete = (event: HubEvent) =>
@@ -46,6 +47,13 @@ export default function CalendarScreen() {
         title="Calendar"
         subtitle={events.length === 1 ? '1 coming up' : `${events.length} coming up`}
         back
+        right={
+          google?.enabled ? (
+            <Button variant="ghost" size="icon" onPress={() => router.push('/google-calendar')}>
+              <Icon as={GoogleLogo} />
+            </Button>
+          ) : null
+        }
       />
 
       <ScrollView className="flex-1" contentContainerClassName="gap-6 px-4 pb-10">

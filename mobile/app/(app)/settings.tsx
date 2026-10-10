@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import {
   Bell,
   Brain,
+  CalendarDots,
   ChatCircleDots,
   MapPin,
   Microphone,
@@ -22,7 +23,7 @@ import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { useCan, useLogout, useMe } from '@/hooks/useAuth';
 import { useFloatingBubble } from '@/hooks/useFloatingBubble';
-import { useHubFamily } from '@/hooks/useHub';
+import { useGoogleCalendar, useHubFamily } from '@/hooks/useHub';
 import { useShareLocation } from '@/hooks/useLocationShare';
 import { usePreferencesStore } from '@/hooks/usePreferences';
 import { NEEDS_REBUILD } from '@/lib/location';
@@ -90,6 +91,7 @@ export default function SettingsScreen() {
   const { data: me } = useMe();
   const logout = useLogout();
   const { data: people = [] } = useHubFamily();
+  const { data: google } = useGoogleCalendar();
 
   const wakeWord = usePreferencesStore((state) => state.wakeWord);
   const memory = usePreferencesStore((state) => state.memory);
@@ -207,6 +209,31 @@ export default function SettingsScreen() {
                     testID="settings-whereabouts"
                   />
                 ) : null}
+              </CardList>
+            </Card>
+          </View>
+        ) : null}
+
+        {/* Only once the hub has its Google key — otherwise there's nothing to connect to. */}
+        {can('calendar.use') && google?.enabled ? (
+          <View className="gap-1">
+            <Text variant="label">Calendar</Text>
+            <Text variant="muted">
+              {google.mine ? `Copying to ${google.mine}` : 'A copy of your events in your own calendar'}
+            </Text>
+            <Card className="p-4">
+              <CardList>
+                <LinkRow
+                  icon={CalendarDots}
+                  title="Google Calendar"
+                  description={
+                    google.mine
+                      ? 'Your events show up there too. Tap to change or disconnect'
+                      : 'Let your events show up in your own Google Calendar'
+                  }
+                  onPress={() => router.push('/google-calendar')}
+                  testID="settings-google-calendar"
+                />
               </CardList>
             </Card>
           </View>
