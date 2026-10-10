@@ -8,10 +8,12 @@ import { Text } from '@/components/ui/text';
 import { useDeleteMemory, useMemory } from '@/hooks/useHub';
 import { relativeTime } from '@/lib/time';
 import type { MemoryNote } from '@/types';
+import { useRefresher } from '@/components/Refresher';
 
 // "What Onai remembers about me", with a delete on every line. Only your own
 // notes: nobody else can read what the hub keeps about you.
 export default function MemoryScreen() {
+  const refresher = useRefresher();
   const { data: notes = [] } = useMemory();
   const remove = useDeleteMemory();
 
@@ -29,7 +31,7 @@ export default function MemoryScreen() {
         back
       />
 
-      <ScrollView className="flex-1" contentContainerClassName="gap-6 px-4 pb-10">
+      <ScrollView refreshControl={refresher} className="flex-1" contentContainerClassName="gap-6 px-4 pb-10">
         <Card className="flex-row items-start gap-3 bg-accent-teal-soft p-4">
           <Icon as={Lock} weight="fill" size={20} className="text-accent-teal-onSoft" />
           <View className="flex-1 gap-1">

@@ -24,6 +24,7 @@ import { Text } from '@/components/ui/text';
 import { useCan, useMe } from '@/hooks/useAuth';
 import { useBriefing, useHubAlarms, useHubFamily, useHubTasks } from '@/hooks/useHub';
 import { formatTime } from '@/lib/time';
+import { useRefresher } from '@/components/Refresher';
 
 // What a parent is most likely to say; kids get the shorter list.
 const SUGGESTIONS: Record<string, string[]> = {
@@ -40,6 +41,7 @@ const SUGGESTIONS: Record<string, string[]> = {
 // The hub's face: what it's doing, who's in, what's outstanding. Everything
 // here is a glance — anything that needs more fits its own tab.
 export default function HomeScreen() {
+  const refresher = useRefresher();
   const insets = useSafeAreaInsets();
   const can = useCan();
   const { data: me } = useMe();
@@ -70,7 +72,7 @@ export default function HomeScreen() {
         </Button>
       </View>
 
-      <ScrollView
+      <ScrollView refreshControl={refresher}
         className="flex-1"
         contentContainerClassName="gap-6 px-4"
         contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}

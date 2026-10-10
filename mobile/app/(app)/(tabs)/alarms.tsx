@@ -17,6 +17,7 @@ import { useCreateAlarm, useDeleteAlarm, useHubAlarms, useHubFamily, useUpdateAl
 import { describeRepeat, formatTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import type { HubAlarm } from '@/types';
+import { useRefresher } from '@/components/Refresher';
 
 const REPEATS: HubAlarm['repeat'][] = ['once', 'daily', 'weekdays'];
 
@@ -24,6 +25,7 @@ const REPEATS: HubAlarm['repeat'][] = ['once', 'daily', 'weekdays'];
 // household's, not one phone's, and "what wakes Ana" is a real question.
 // A parent sees everyone's; everyone else sees their own.
 export default function AlarmsScreen() {
+  const refresher = useRefresher();
   const insets = useSafeAreaInsets();
   const can = useCan();
   const { data: me } = useMe();
@@ -64,7 +66,7 @@ export default function AlarmsScreen() {
         </View>
       </View>
 
-      <ScrollView
+      <ScrollView refreshControl={refresher}
         className="flex-1"
         contentContainerClassName="gap-6 px-4"
         contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}

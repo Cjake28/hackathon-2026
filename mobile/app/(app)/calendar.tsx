@@ -11,6 +11,7 @@ import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { useDeleteEvent, useEvents, useGoogleCalendar, useHubFamily } from '@/hooks/useHub';
 import type { HubEvent } from '@/types';
+import { useRefresher } from '@/components/Refresher';
 
 const DAY = new Intl.DateTimeFormat('en-PH', { weekday: 'long', day: 'numeric', month: 'long' });
 const CLOCK = new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit' });
@@ -29,6 +30,7 @@ function byDay(events: HubEvent[]) {
 // The family calendar, from the hub. Onai adds, moves and cancels events by voice ("Hey Onai, piano for Ana on
 // Saturday at 4"); 15 min before each one the phone gets a heads-up. Long-press an event to delete it.
 export default function CalendarScreen() {
+  const refresher = useRefresher();
   const { data: events = [] } = useEvents();
   const { data: family = [] } = useHubFamily();
   const remove = useDeleteEvent();
@@ -56,7 +58,7 @@ export default function CalendarScreen() {
         }
       />
 
-      <ScrollView className="flex-1" contentContainerClassName="gap-6 px-4 pb-10">
+      <ScrollView refreshControl={refresher} className="flex-1" contentContainerClassName="gap-6 px-4 pb-10">
         <Button testID="calendar-add" onPress={() => router.push('/talk')}>
           <Icon as={Microphone} weight="fill" className="text-primary-foreground" />
           <Text className="text-primary-foreground">Add, move or cancel with Onai</Text>

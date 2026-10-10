@@ -7,17 +7,19 @@ import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { useHeard } from '@/hooks/useHub';
 import { relativeTime } from '@/lib/time';
+import { useRefresher } from '@/components/Refresher';
 
 // The last things Onai heard out loud, newest first. Filled by the device poll
 // (voice:heard notices) while the app is open — nothing is stored on the phone.
 export default function HeardScreen() {
+  const refresher = useRefresher();
   const { data: heard = [] } = useHeard();
 
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title="What Onai heard" subtitle="Said out loud in the house" back />
 
-      <ScrollView className="flex-1" contentContainerClassName="gap-4 px-4 pb-10">
+      <ScrollView refreshControl={refresher} className="flex-1" contentContainerClassName="gap-4 px-4 pb-10">
         <Card className="flex-row items-start gap-3 bg-accent-teal-soft p-4">
           <Icon as={Ear} weight="fill" size={20} className="text-accent-teal-onSoft" />
           <View className="flex-1 gap-1">

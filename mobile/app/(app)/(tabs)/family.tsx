@@ -13,11 +13,13 @@ import { Text } from '@/components/ui/text';
 import { useCan, useMe } from '@/hooks/useAuth';
 import { useHubFamily, usePoints } from '@/hooks/useHub';
 import { relativeTime } from '@/lib/time';
+import { useRefresher } from '@/components/Refresher';
 
 // The household, straight from the hub: who's in, who's out, and how each
 // person is doing on chores. "Home" means their phone reached the hub in the
 // last couple of minutes, so it keeps itself up to date.
 export default function FamilyScreen() {
+  const refresher = useRefresher();
   const insets = useSafeAreaInsets();
   const can = useCan();
   const { data: me } = useMe();
@@ -43,7 +45,7 @@ export default function FamilyScreen() {
         ) : null}
       </View>
 
-      <ScrollView
+      <ScrollView refreshControl={refresher}
         className="flex-1"
         contentContainerClassName="gap-6 px-4"
         contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}

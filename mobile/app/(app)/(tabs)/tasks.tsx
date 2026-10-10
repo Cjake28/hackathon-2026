@@ -16,6 +16,7 @@ import { useCan, useMe } from '@/hooks/useAuth';
 import { useHubTasks, usePoints, useSetTaskDone } from '@/hooks/useHub';
 import { cn } from '@/lib/utils';
 import type { HubTask } from '@/types';
+import { useRefresher } from '@/components/Refresher';
 
 type Filter = 'open' | 'mine' | 'done';
 const FILTERS: { key: Filter; label: string }[] = [
@@ -33,6 +34,7 @@ const STATUS_LABELS: Record<HubTask['status'], string> = {
 // Every task and chore in the house. Ticking the box is the whole interaction:
 // the hub tells Mom and Dad straight away, and a finished chore is worth points.
 export default function TasksScreen() {
+  const refresher = useRefresher();
   const insets = useSafeAreaInsets();
   const can = useCan();
   const { data: me } = useMe();
@@ -88,6 +90,7 @@ export default function TasksScreen() {
       </View>
 
       <FlatList
+        refreshControl={refresher}
         data={visible}
         keyExtractor={(item) => String(item.id)}
         contentContainerClassName="gap-2 px-4 pt-4"

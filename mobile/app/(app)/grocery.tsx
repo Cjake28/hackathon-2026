@@ -12,11 +12,13 @@ import { Text } from '@/components/ui/text';
 import { useCan } from '@/hooks/useAuth';
 import { useCreateItem, useDeleteItem, useItems, useUpdateItem } from '@/hooks/useItems';
 import { cn } from '@/lib/utils';
+import { useRefresher } from '@/components/Refresher';
 
 // The household's shopping list, shared by every phone on the hub. Anyone can
 // add; ticking something off is the whole interaction, so the rows are big and
 // the checkbox is the hit target.
 export default function GroceryScreen() {
+  const refresher = useRefresher();
   const can = useCan();
   const { data: items = [] } = useItems();
   const create = useCreateItem();
@@ -37,7 +39,7 @@ export default function GroceryScreen() {
     <View className="flex-1 bg-background">
       <ScreenHeader title="Grocery" subtitle={`${left.length} still to buy`} back />
 
-      <ScrollView className="flex-1" contentContainerClassName="gap-6 px-4 pb-10" keyboardShouldPersistTaps="handled">
+      <ScrollView refreshControl={refresher} className="flex-1" contentContainerClassName="gap-6 px-4 pb-10" keyboardShouldPersistTaps="handled">
         {can('items.create') ? (
           <View className="flex-row items-center gap-2">
             <Input

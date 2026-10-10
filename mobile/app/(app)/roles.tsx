@@ -11,6 +11,7 @@ import { useCan, useMe } from '@/hooks/useAuth';
 import { useCreateRole, useDeleteRole, usePermissionList, useRoles, useUpdateRole } from '@/hooks/useHub';
 import { cn } from '@/lib/utils';
 import type { RoleRow } from '@/types';
+import { useRefresher } from '@/components/Refresher';
 
 // What each permission lets someone do (names come from GET /roles/permissions).
 const LABELS: Record<string, string> = {
@@ -41,6 +42,7 @@ const chip = (on: boolean) => cn('rounded-full px-3 py-1.5', on ? 'bg-primary' :
 // Parents only (roles.manage): make roles (e.g. "grandparent", "yaya") and tap permissions on and off.
 // Changes apply right away to everyone with that role. Your own role is locked so you can't lock yourself out.
 export default function RolesScreen() {
+  const refresher = useRefresher();
   const can = useCan();
   const { data: me } = useMe();
   const { data: roles = [] } = useRoles();
@@ -71,7 +73,7 @@ export default function RolesScreen() {
     <View className="flex-1 bg-background">
       <ScreenHeader title="Roles" subtitle="What each role is allowed to do" back />
 
-      <ScrollView className="flex-1" contentContainerClassName="gap-6 px-4 pb-10" keyboardShouldPersistTaps="handled">
+      <ScrollView refreshControl={refresher} className="flex-1" contentContainerClassName="gap-6 px-4 pb-10" keyboardShouldPersistTaps="handled">
         {roles.map((role) => {
           const mine = role.id === me?.roleId;
           return (

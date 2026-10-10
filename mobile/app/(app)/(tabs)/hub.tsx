@@ -12,6 +12,7 @@ import { useHubAlarms } from '@/hooks/useHub';
 import { accents } from '@/lib/accents';
 import { cn } from '@/lib/utils';
 import type { AccentName } from '@/types';
+import { useRefresher } from '@/components/Refresher';
 
 const HUB = { name: 'Home hub', location: 'Living room', model: 'Local model · 8B', storage: '512 GB', uptimeDays: 23 };
 
@@ -63,6 +64,7 @@ function ManageRow({
 // The box itself: what it is, where it listens, and what it keeps — and the
 // short list of the handful of things that genuinely need the internet.
 export default function HubScreen() {
+  const refresher = useRefresher();
   const insets = useSafeAreaInsets();
   const can = useCan();
   const { data: alarms = [] } = useHubAlarms(can('alarms.family') ? { all: true } : {});
@@ -75,7 +77,7 @@ export default function HubScreen() {
         <Text variant="muted">Your home's AI brain, always on</Text>
       </View>
 
-      <ScrollView className="flex-1" contentContainerClassName="gap-6 px-4" contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}>
+      <ScrollView refreshControl={refresher} className="flex-1" contentContainerClassName="gap-6 px-4" contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}>
         {/* Chunky 3D panel, same as the home screen: green face on a darker green edge. */}
         <View className="rounded-3xl bg-primary-edge pb-1.5">
           <Card className="items-center gap-4 border-0 bg-primary py-8">

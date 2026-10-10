@@ -8,6 +8,7 @@ import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 import { useCan } from '@/hooks/useAuth';
+import { useRefresher } from '@/components/Refresher';
 import {
   useConnectFamilyCalendar,
   useConnectMyCalendar,
@@ -19,6 +20,7 @@ import {
 // a Gmail isn't proof it's yours: you share the calendar with the hub, the hub hides a one-time code inside it, and
 // you type that code back. Events are saved on the hub first, so Google only ever gets a copy.
 export default function GoogleCalendarScreen() {
+  const refresher = useRefresher();
   const can = useCan();
   const { data: google, isPending } = useGoogleCalendar();
   const connect = useConnectMyCalendar();
@@ -45,7 +47,7 @@ export default function GoogleCalendarScreen() {
     <View className="flex-1 bg-background">
       <ScreenHeader title="Google Calendar" subtitle="Your events, also in your own calendar" back />
 
-      <ScrollView className="flex-1" contentContainerClassName="gap-6 px-4 pb-10" keyboardShouldPersistTaps="handled">
+      <ScrollView refreshControl={refresher} className="flex-1" contentContainerClassName="gap-6 px-4 pb-10" keyboardShouldPersistTaps="handled">
         <Card className="flex-row items-start gap-3 bg-accent-teal-soft p-4">
           <Icon as={Lock} weight="fill" size={20} className="text-accent-teal-onSoft" />
           <View className="flex-1 gap-1">

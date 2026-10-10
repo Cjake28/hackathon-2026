@@ -11,12 +11,14 @@ import { Text } from '@/components/ui/text';
 import { useCan, useMe } from '@/hooks/useAuth';
 import { useCreateUser, useDeleteUser, useRoles, useUpdateUser, useUsers } from '@/hooks/useHub';
 import { cn } from '@/lib/utils';
+import { useRefresher } from '@/components/Refresher';
 
 const chip = (on: boolean) =>
   cn('rounded-full px-3 py-1.5', on ? 'bg-primary' : 'border border-primary');
 
 // Parents only (users.manage): make an account for each family member and pick its role. There's no sign-up.
 export default function AccountsScreen() {
+  const refresher = useRefresher();
   const can = useCan();
   const { data: me } = useMe();
   const { data: users = [] } = useUsers();
@@ -64,7 +66,7 @@ export default function AccountsScreen() {
     <View className="flex-1 bg-background">
       <ScreenHeader title="Family accounts" subtitle={`${users.length} on this hub`} back />
 
-      <ScrollView className="flex-1" contentContainerClassName="gap-6 px-4 pb-10" keyboardShouldPersistTaps="handled">
+      <ScrollView refreshControl={refresher} className="flex-1" contentContainerClassName="gap-6 px-4 pb-10" keyboardShouldPersistTaps="handled">
         <View className="gap-2">
           <Text variant="label">Everyone</Text>
           {users.map((u) => (

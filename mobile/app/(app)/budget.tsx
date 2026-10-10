@@ -15,6 +15,7 @@ import { useBudgetSummary, useCreateExpense, useDeleteExpense, useExpenses, useH
 import { accents } from '@/lib/accents';
 import { cn } from '@/lib/utils';
 import type { AccentName, ExpenseCategory } from '@/types';
+import { useRefresher } from '@/components/Refresher';
 
 const CATEGORIES: Record<
   ExpenseCategory,
@@ -40,6 +41,7 @@ const DATE = new Intl.DateTimeFormat('en-PH', { day: 'numeric', month: 'short' }
 // What the house has spent this month. The hub keeps the running total and the
 // limit, so every phone sees the same number and Onai can add to it by voice.
 export default function BudgetScreen() {
+  const refresher = useRefresher();
   const can = useCan();
   const { data: expenses = [] } = useExpenses();
   const { data: summary } = useBudgetSummary();
@@ -65,7 +67,7 @@ export default function BudgetScreen() {
     <View className="flex-1 bg-background">
       <ScreenHeader title="Budget" subtitle="This month" back />
 
-      <ScrollView className="flex-1" contentContainerClassName="gap-6 px-4 pb-10" keyboardShouldPersistTaps="handled">
+      <ScrollView refreshControl={refresher} className="flex-1" contentContainerClassName="gap-6 px-4 pb-10" keyboardShouldPersistTaps="handled">
         <Card className="items-center gap-3 py-8">
           <Text variant="muted">Spent this month</Text>
           <Text variant="h2" className="pb-0">

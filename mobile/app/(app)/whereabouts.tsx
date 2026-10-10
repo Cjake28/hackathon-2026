@@ -15,11 +15,13 @@ import { useAddPlace, useDeletePlace, usePlaces, useWhereabouts } from '@/hooks/
 import { NEEDS_REBUILD, askForLocation, currentLocation, hasLocation } from '@/lib/location';
 import { relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
+import { useRefresher } from '@/components/Refresher';
 
 // Where everyone is, for Mom and Dad. Phones send their position only while the
 // app is open and only to this house's hub; the list below is all it's used for,
 // plus "Ana arrived at School" on the parents' phones.
 export default function WhereaboutsScreen() {
+  const refresher = useRefresher();
   const can = useCan();
   const { data: people = [] } = useWhereabouts();
   const { data: places = [] } = usePlaces();
@@ -37,7 +39,7 @@ export default function WhereaboutsScreen() {
         back
       />
 
-      <ScrollView className="flex-1" contentContainerClassName="gap-6 px-4 pb-10" keyboardShouldPersistTaps="handled">
+      <ScrollView refreshControl={refresher} className="flex-1" contentContainerClassName="gap-6 px-4 pb-10" keyboardShouldPersistTaps="handled">
         {people.length === 0 ? (
           <EmptyState
             icon={NavigationArrow}
