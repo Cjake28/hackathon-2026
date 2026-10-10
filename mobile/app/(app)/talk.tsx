@@ -2,7 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import * as Speech from 'expo-speech';
 import { Microphone, PaperPlaneTilt, Trash } from 'phosphor-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View, type TextInput } from 'react-native';
+import { KeyboardAvoidingView, Pressable, ScrollView, View, type TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FamilyAvatar } from '@/components/FamilyAvatar';
 import { MarkdownText } from '@/components/MarkdownText';
@@ -105,7 +105,7 @@ export default function TalkScreen() {
         }
       />
 
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView className="flex-1" behavior="padding">
         <ScrollView
           ref={scrollRef}
           className="flex-1"

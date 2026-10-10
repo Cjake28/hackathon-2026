@@ -1,6 +1,6 @@
 import { House, MapPin, NavigationArrow, Plus, Trash } from 'phosphor-react-native';
 import { useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Linking, Pressable, ScrollView, View } from 'react-native';
 import { EmptyState } from '@/components/EmptyState';
 import { FamilyAvatar } from '@/components/FamilyAvatar';
 import { ScreenHeader } from '@/components/ScreenHeader';
@@ -50,7 +50,12 @@ export default function WhereaboutsScreen() {
             <Card className="p-4">
               <CardList>
                 {people.map((person) => (
-                  <View key={person.userId} className="flex-row items-center gap-3 py-2.5">
+                  <Pressable
+                    key={person.userId}
+                    testID={`whereabouts-map-${person.userId}`}
+                    onPress={() => Linking.openURL(`https://www.google.com/maps?q=${person.lat},${person.lng}`)}
+                    className="flex-row items-center gap-3 py-2.5"
+                  >
                     <FamilyAvatar member={{ id: person.userId, name: person.name }} size={40} />
                     <View className="flex-1 gap-0.5">
                       <Text className="font-medium" numberOfLines={1}>
@@ -68,10 +73,14 @@ export default function WhereaboutsScreen() {
                         {relativeTime(person.updatedAt)}
                       </Text>
                     </View>
-                  </View>
+                    <Icon as={MapPin} size={18} className="text-primary" />
+                  </Pressable>
                 ))}
               </CardList>
             </Card>
+            <Text variant="small" className="text-muted-foreground">
+              Tap someone to see where they are on the map.
+            </Text>
           </View>
         )}
 
