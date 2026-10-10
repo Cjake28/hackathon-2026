@@ -240,6 +240,16 @@ export type HubEvent = {
   createdAt: string;
 };
 
+// Connecting a Google Calendar (GET /google, docs/google-calendar.md). shareWith: the address to share your own
+// calendar with. mine / family: the calendar already connected. pending: the one waiting for its code.
+export type GoogleCalendar = {
+  enabled: boolean;
+  shareWith: string | null;
+  mine: string | null;
+  pending: string | null;
+  family: string | null;
+};
+
 // ---- Hub API (TEAM-PLAN.md 4.4, docs/mobile-hub.md). "Hub" names so they don't clash with the local types above. ----
 export type HubRole = 'admin' | 'parent' | 'child' | 'guest';
 export type Person = { id: number; name: string; role: HubRole; isHome: boolean; lastSeenAt: string | null };

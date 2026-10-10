@@ -4,6 +4,7 @@ import { ApiError, api } from '@/lib/api';
 import type {
   BudgetSummary,
   Expense,
+  GoogleCalendar,
   HubEvent,
   HubAlarm,
   HubNotice,
@@ -256,6 +257,46 @@ export const useDeleteEvent = () => {
   return useMutation({
     mutationFn: (id: number) => api.delete<HubEvent>(`/events/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['events'] }),
+  });
+};
+
+
+// ---- Google Calendar (calendar.use): a copy of your events in your own Google Calendar ----
+// Events are saved on the hub first, so the calendar still works with the internet off (docs/google-calendar.md).
+
+export const useGoogleCalendar = () =>
+  useQuery({ queryKey: ['google'], queryFn: () => api.get<GoogleCalendar>('/google') });
+
+// Step 1: your Gmail → the hub drops a one-time code inside that calendar. '' disconnects.
+export const useConnectMyCalendar = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (calendarId: string) => api.patch<GoogleCalendar>('/google/me', { calendarId }),
+    onSuccess: (data) => qc.setQueryData(['google'], data),
+  });
+};
+
+// Step 2: the code from the "Jarvis code" event in that calendar.
+export const useVerifyMyCalendar = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (code: string) => api.patch<GoogleCalendar>('/google/me/verify', { code }),
+    onSuccess: (data) => {
+      qc.setQueryData(['google'], data);
+      qc.invalidateQueries({ queryKey: ['events'] });
+    },
+  });
+};
+
+// Parents only (users.manage): the shared "Family" calendar for events that belong to nobody in particular.
+export const useConnectFamilyCalendar = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (calendarId: string) => api.patch<GoogleCalendar>('/google/family', { calendarId }),
+    onSuccess: (data) => {
+      qc.setQueryData(['google'], data);
+      qc.invalidateQueries({ queryKey: ['events'] });
+    },
   });
 };
 

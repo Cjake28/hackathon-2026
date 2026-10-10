@@ -21,6 +21,7 @@ export default function AppLayout() {
         <Stack.Screen name="grocery" />
         <Stack.Screen name="memory" />
         <Stack.Screen name="calendar" />
+        <Stack.Screen name="google-calendar" />
         <Stack.Screen name="budget" />
         <Stack.Screen name="whereabouts" />
         <Stack.Screen name="heard" />
