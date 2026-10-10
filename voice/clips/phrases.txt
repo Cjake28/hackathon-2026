@@ -28,3 +28,10 @@ Hmm.
 Okay.
 Sige.
 Let me check.
+
+# Pitch video (docs/pitch-video.md): the exact lines the hub says in each beat, for JM
+JM, wake up!
+JM, Piano lesson in 15 minutes.
+Welcome home, JM
+You have 2 tasks left: wash the dishes and finish math homework.
+Announcement from Mom: Dinner is ready
