@@ -30,6 +30,20 @@ export function startAlarmSound() {
   const sound = load();
   if (!sound) return;
   try {
+    sound.loop = true; // a notice may have switched it off
+    sound.seekTo(0);
+    sound.play();
+  } catch {
+    player = null;
+  }
+}
+
+/** One short ring, for a notice ("New task", an announcement). Same sound, played once. */
+export function playNoticeSound() {
+  const sound = load();
+  if (!sound) return;
+  try {
+    sound.loop = false;
     sound.seekTo(0);
     sound.play();
   } catch {
